@@ -24,17 +24,24 @@ export function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [registrationAllowed, setRegistrationAllowed] = useState(true);
+  const [isCheckingLimit, setIsCheckingLimit] = useState(true);
+  const [serviceUnavailable, setServiceUnavailable] = useState(false);
 
   // Check if registration is allowed on component mount
   useEffect(() => {
+    setIsCheckingLimit(true);
     checkAccountLimit()
       .then(({ registration_allowed }) => {
         setRegistrationAllowed(registration_allowed);
+        setServiceUnavailable(false);
       })
       .catch((err) => {
         console.error('Failed to check account limit:', err);
-        // Allow registration by default if check fails
-        setRegistrationAllowed(true);
+        setServiceUnavailable(true);
+        setRegistrationAllowed(false);
+      })
+      .finally(() => {
+        setIsCheckingLimit(false);
       });
   }, []);
 
@@ -63,7 +70,42 @@ export function RegisterPage() {
     }
   };
 
-  // Show message if registration is unavailable
+  // Show loading state while checking account limit
+  if (isCheckingLimit) {
+    return (
+      <Card className="w-full max-w-md mx-auto mt-20">
+        <CardHeader>
+          <CardTitle>Loading...</CardTitle>
+          <CardDescription>Checking registration availability</CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
+  // Show error if service is unavailable
+  if (serviceUnavailable) {
+    return (
+      <Card className="w-full max-w-md mx-auto mt-20">
+        <CardHeader>
+          <CardTitle>Service Unavailable</CardTitle>
+          <CardDescription>
+            Unable to connect to the server. Please try again later.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() => window.location.reload()}
+          >
+            Retry
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Show message if registration is unavailable (max accounts reached)
   if (!registrationAllowed) {
     return (
       <Card className="w-full max-w-md mx-auto mt-20">
@@ -101,6 +143,7 @@ export function RegisterPage() {
               required
               minLength={3}
               maxLength={50}
+              aria-invalid={error ? 'true' : undefined}
             />
           </div>
           <div className="space-y-2">
@@ -113,6 +156,8 @@ export function RegisterPage() {
               placeholder="Enter password (8+ chars)"
               required
               minLength={8}
+              maxLength={128}
+              aria-invalid={error ? 'true' : undefined}
             />
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}

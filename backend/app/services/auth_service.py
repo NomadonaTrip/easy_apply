@@ -61,17 +61,24 @@ async def create_user(user_data: UserCreate) -> User:
     """
     Create a new user with hashed password.
     Raises ValueError if max accounts reached or username taken.
+
+    Note: All checks and creation happen in a single transaction to prevent
+    race conditions that could allow exceeding the 2-account limit.
     """
-    # Check account limit
-    if await get_user_count() >= MAX_ACCOUNTS:
-        raise ValueError("Maximum accounts reached")
-
-    # Check username uniqueness
-    if await get_user_by_username(user_data.username):
-        raise ValueError("Username already taken")
-
-    # Create user with hashed password
     async with async_session_maker() as session:
+        # Check account limit (inside transaction)
+        count_result = await session.execute(select(func.count()).select_from(User))
+        if count_result.scalar_one() >= MAX_ACCOUNTS:
+            raise ValueError("Maximum accounts reached")
+
+        # Check username uniqueness (inside same transaction)
+        existing_result = await session.execute(
+            select(User).where(User.username == user_data.username)
+        )
+        if existing_result.scalar_one_or_none():
+            raise ValueError("Username already taken")
+
+        # Create user with hashed password (same transaction)
         user = User(
             username=user_data.username,
             password_hash=hash_password(user_data.password)

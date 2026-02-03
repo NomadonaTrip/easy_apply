@@ -33,8 +33,8 @@ class User(SQLModel, table=True):
             raise ValueError("username cannot be empty")
         if len(self.username) > 50:
             raise ValueError("username cannot exceed 50 characters")
-        if not self.password_hash or len(self.password_hash) < 60:
-            raise ValueError("password_hash must be at least 60 characters (bcrypt)")
+        if not self.password_hash:
+            raise ValueError("password_hash is required")
         if len(self.password_hash) > 255:
             raise ValueError("password_hash cannot exceed 255 characters")
 
