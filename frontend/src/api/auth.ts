@@ -64,3 +64,14 @@ export async function login(data: LoginRequest): Promise<UserRead> {
     credentials: 'include',
   });
 }
+
+/**
+ * Logout the current user.
+ *
+ * @throws Error if logout fails
+ */
+export async function logout(): Promise<void> {
+  await apiRequest('/auth/logout', {
+    method: 'POST',
+  });
+}

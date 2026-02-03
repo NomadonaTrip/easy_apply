@@ -209,3 +209,102 @@ async def test_login_cookie_has_samesite_lax(client):
     # Check cookie headers - samesite=lax should be set
     set_cookie = response.headers.get("set-cookie", "")
     assert "samesite=lax" in set_cookie.lower()
+
+
+# Logout Tests (Story 1-5)
+
+@pytest.mark.asyncio
+async def test_logout_clears_session(client):
+    """Logout returns 200 and clears session cookie."""
+    # Register and login first
+    await client.post(
+        "/api/v1/auth/register",
+        json={"username": "logouttest", "password": "password123"}
+    )
+    login_response = await client.post(
+        "/api/v1/auth/login",
+        json={"username": "logouttest", "password": "password123"}
+    )
+
+    # Set the session cookie on the client from login response
+    session_cookie = login_response.cookies.get("session")
+    client.cookies.set("session", session_cookie)
+
+    # Logout
+    logout_response = await client.post("/api/v1/auth/logout")
+    assert logout_response.status_code == 200
+
+    # Verify session cookie is cleared via Set-Cookie header
+    set_cookie = logout_response.headers.get("set-cookie", "")
+    assert "session=" in set_cookie.lower()
+    # Cookie should be set to expire (max-age=0 or expires in the past)
+    assert 'max-age=0' in set_cookie.lower() or '="";' in set_cookie
+
+
+@pytest.mark.asyncio
+async def test_logout_invalidates_session_server_side(client):
+    """Session is invalidated server-side after logout."""
+    # Register and login
+    await client.post(
+        "/api/v1/auth/register",
+        json={"username": "invalidtest", "password": "password123"}
+    )
+    login_response = await client.post(
+        "/api/v1/auth/login",
+        json={"username": "invalidtest", "password": "password123"}
+    )
+    session_cookie = login_response.cookies.get("session")
+
+    # Set the session cookie on the client
+    client.cookies.set("session", session_cookie)
+
+    # Logout
+    await client.post("/api/v1/auth/logout")
+
+    # Clear client cookies and set the old session token manually
+    client.cookies.clear()
+    client.cookies.set("session", session_cookie)
+
+    # Try to use the old session cookie - should be invalidated server-side
+    me_response = await client.get("/api/v1/auth/me")
+    assert me_response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_protected_route_after_logout(client):
+    """Protected routes return 401 after logout."""
+    # Register and login
+    await client.post(
+        "/api/v1/auth/register",
+        json={"username": "protectedtest", "password": "password123"}
+    )
+    login_response = await client.post(
+        "/api/v1/auth/login",
+        json={"username": "protectedtest", "password": "password123"}
+    )
+    session_cookie = login_response.cookies.get("session")
+
+    # Set the session cookie on the client
+    client.cookies.set("session", session_cookie)
+
+    # Verify can access protected route
+    me_response = await client.get("/api/v1/auth/me")
+    assert me_response.status_code == 200
+
+    # Logout
+    await client.post("/api/v1/auth/logout")
+
+    # Clear client cookies and set the old session token manually
+    client.cookies.clear()
+    client.cookies.set("session", session_cookie)
+
+    # Verify protected route is now inaccessible with old session token
+    me_response_after = await client.get("/api/v1/auth/me")
+    assert me_response_after.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_logout_without_session(client):
+    """Logout without being logged in should still return 200."""
+    response = await client.post("/api/v1/auth/logout")
+    assert response.status_code == 200

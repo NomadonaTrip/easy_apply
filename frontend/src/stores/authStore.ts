@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { logout as logoutApi } from '@/api/auth';
 
 export interface User {
   id: number;
@@ -10,15 +11,19 @@ interface AuthState {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  isLoggingOut: boolean;
+  logoutError: string | null;
   setUser: (user: User | null) => void;
   checkAuth: () => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isLoading: true,
   isAuthenticated: false,
+  isLoggingOut: false,
+  logoutError: null,
 
   setUser: (user) => set({
     user,
@@ -42,5 +47,17 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
-  logout: () => set({ user: null, isAuthenticated: false }),
+  logout: async () => {
+    set({ isLoggingOut: true, logoutError: null });
+    try {
+      await logoutApi();
+      set({ user: null, isAuthenticated: false, isLoggingOut: false });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Logout failed';
+      console.error('Logout error:', error);
+      set({ logoutError: message, isLoggingOut: false });
+      // Still clear local state for security
+      set({ user: null, isAuthenticated: false });
+    }
+  },
 }));

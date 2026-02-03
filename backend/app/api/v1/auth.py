@@ -1,6 +1,7 @@
 """Authentication API endpoints."""
 
-from fastapi import APIRouter, HTTPException, status, Response, Depends
+from typing import Optional
+from fastapi import APIRouter, HTTPException, status, Response, Depends, Cookie
 from pydantic import BaseModel
 
 from app.models.user import User, UserCreate, UserRead
@@ -111,3 +112,27 @@ async def get_current_user_endpoint(
 ):
     """Get current authenticated user."""
     return UserRead.model_validate(current_user)
+
+
+@router.post("/logout")
+async def logout(
+    response: Response,
+    session: Optional[str] = Cookie(default=None)
+):
+    """
+    Log out the current user.
+
+    Invalidates the session server-side and clears the session cookie.
+    """
+    if session:
+        session_service.invalidate_session(session)
+
+    # Clear the cookie by setting it to expire immediately
+    response.delete_cookie(
+        key="session",
+        httponly=True,
+        secure=False,  # Set True in production
+        samesite="lax"
+    )
+
+    return {"message": "Logged out successfully"}
