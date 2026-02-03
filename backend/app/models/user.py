@@ -1,9 +1,12 @@
 """User model and schemas."""
 
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Optional, TYPE_CHECKING
 
-from sqlmodel import SQLModel, Field
+from sqlmodel import SQLModel, Field, Relationship
+
+if TYPE_CHECKING:
+    from app.models.role import Role
 
 
 class User(SQLModel, table=True):
@@ -16,6 +19,12 @@ class User(SQLModel, table=True):
     password_hash: str = Field(max_length=255)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
+    )
+
+    # Relationships - cascade delete ensures roles are removed when user is deleted
+    roles: list["Role"] = Relationship(
+        back_populates="user",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
     )
 
     def __init__(self, **data: Any) -> None:
