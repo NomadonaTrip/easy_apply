@@ -308,3 +308,43 @@ async def test_logout_without_session(client):
     """Logout without being logged in should still return 200."""
     response = await client.post("/api/v1/auth/logout")
     assert response.status_code == 200
+
+
+# Full Auth Flow Integration Test (Story 1-6)
+
+@pytest.mark.asyncio
+async def test_full_auth_flow(client):
+    """Test complete registration -> login -> protected -> logout flow."""
+    # 1. Register
+    reg_response = await client.post(
+        "/api/v1/auth/register",
+        json={"username": "flowtest", "password": "password123"}
+    )
+    assert reg_response.status_code == 201
+
+    # 2. Login
+    login_response = await client.post(
+        "/api/v1/auth/login",
+        json={"username": "flowtest", "password": "password123"}
+    )
+    assert login_response.status_code == 200
+    assert "session" in login_response.cookies
+
+    # Set session cookie on client
+    session_cookie = login_response.cookies.get("session")
+    client.cookies.set("session", session_cookie)
+
+    # 3. Access protected route
+    me_response = await client.get("/api/v1/auth/me")
+    assert me_response.status_code == 200
+    assert me_response.json()["username"] == "flowtest"
+
+    # 4. Logout
+    logout_response = await client.post("/api/v1/auth/logout")
+    assert logout_response.status_code == 200
+
+    # 5. Verify protected route is inaccessible with old session
+    client.cookies.clear()
+    client.cookies.set("session", session_cookie)
+    me_after_logout = await client.get("/api/v1/auth/me")
+    assert me_after_logout.status_code == 401

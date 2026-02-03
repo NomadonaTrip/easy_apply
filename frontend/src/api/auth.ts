@@ -61,7 +61,6 @@ export async function login(data: LoginRequest): Promise<UserRead> {
   return apiRequest<UserRead>('/auth/login', {
     method: 'POST',
     body: JSON.stringify(data),
-    credentials: 'include',
   });
 }
 

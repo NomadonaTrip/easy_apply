@@ -110,12 +110,19 @@ describe('authStore', () => {
   })
 
   describe('logout', () => {
-    it('should clear user and set isAuthenticated to false', () => {
+    it('should clear user and set isAuthenticated to false', async () => {
+      // Mock successful logout response
+      vi.mocked(global.fetch).mockResolvedValueOnce({
+        ok: true,
+        status: 204,
+        json: async () => undefined,
+      } as Response)
+
       // First set a user
       useAuthStore.getState().setUser({ id: 1, username: 'test', created_at: '' })
 
       // Then logout
-      useAuthStore.getState().logout()
+      await useAuthStore.getState().logout()
 
       const state = useAuthStore.getState()
       expect(state.user).toBeNull()

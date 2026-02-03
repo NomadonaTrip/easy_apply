@@ -54,7 +54,9 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ user: null, isAuthenticated: false, isLoggingOut: false });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Logout failed';
-      console.error('Logout error:', error);
+      if (import.meta.env.DEV) {
+        console.error('Logout error:', error);
+      }
       set({ logoutError: message, isLoggingOut: false });
       // Still clear local state for security
       set({ user: null, isAuthenticated: false });

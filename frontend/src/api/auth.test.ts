@@ -66,7 +66,7 @@ describe('auth API', () => {
       expect(global.fetch).toHaveBeenCalledWith('/api/v1/auth/register', {
         method: 'POST',
         body: JSON.stringify({ username: 'newuser', password: 'password123' }),
-        credentials: 'same-origin',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -111,7 +111,7 @@ describe('auth API', () => {
 
       expect(result).toEqual(mockLimit)
       expect(global.fetch).toHaveBeenCalledWith('/api/v1/auth/account-limit', {
-        credentials: 'same-origin',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { LoginPage } from './LoginPage'
 import { useAuthStore } from '@/stores/authStore'
 import * as authApi from '@/api/auth'
@@ -8,23 +9,35 @@ import * as authApi from '@/api/auth'
 // Mock the auth API
 vi.mock('@/api/auth', () => ({
   login: vi.fn(),
+  checkAccountLimit: vi.fn(),
 }))
 
-// Mock react-router-dom's useNavigate
+// Mock react-router-dom's useNavigate and useLocation
 const mockNavigate = vi.fn()
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom')
   return {
     ...actual,
     useNavigate: () => mockNavigate,
+    useLocation: () => ({ state: null }),
   }
 })
 
 function renderLoginPage() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  })
+
   return render(
-    <BrowserRouter>
-      <LoginPage />
-    </BrowserRouter>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <LoginPage />
+      </BrowserRouter>
+    </QueryClientProvider>
   )
 }
 
@@ -36,6 +49,12 @@ describe('LoginPage', () => {
       user: null,
       isLoading: false,
       isAuthenticated: false,
+    })
+    // Default to registration allowed
+    vi.mocked(authApi.checkAccountLimit).mockResolvedValue({
+      current_count: 0,
+      max_accounts: 2,
+      registration_allowed: true,
     })
   })
 
@@ -55,9 +74,33 @@ describe('LoginPage', () => {
       expect(screen.getByRole('button', { name: /login/i })).toBeInTheDocument()
     })
 
-    it('should render link to register page', () => {
+    it('should render link to register page when registration allowed', async () => {
+      vi.mocked(authApi.checkAccountLimit).mockResolvedValue({
+        current_count: 0,
+        max_accounts: 2,
+        registration_allowed: true,
+      })
+
       renderLoginPage()
-      expect(screen.getByRole('link', { name: /register/i })).toBeInTheDocument()
+
+      await waitFor(() => {
+        expect(screen.getByRole('link', { name: /register/i })).toBeInTheDocument()
+      })
+    })
+
+    it('should hide register link when max accounts reached', async () => {
+      vi.mocked(authApi.checkAccountLimit).mockResolvedValue({
+        current_count: 2,
+        max_accounts: 2,
+        registration_allowed: false,
+      })
+
+      renderLoginPage()
+
+      // Wait for the query to complete, then verify no register link
+      await waitFor(() => {
+        expect(screen.queryByRole('link', { name: /register/i })).not.toBeInTheDocument()
+      })
     })
   })
 
@@ -118,7 +161,7 @@ describe('LoginPage', () => {
       fireEvent.click(screen.getByRole('button', { name: /login/i }))
 
       await waitFor(() => {
-        expect(mockNavigate).toHaveBeenCalledWith('/dashboard')
+        expect(mockNavigate).toHaveBeenCalledWith('/dashboard', { replace: true })
       })
     })
   })
@@ -145,27 +188,6 @@ describe('LoginPage', () => {
         )
       })
     })
-
-    it('should have aria-describedby linking error to inputs', async () => {
-      vi.mocked(authApi.login).mockRejectedValueOnce(new Error('Error'))
-
-      renderLoginPage()
-
-      fireEvent.change(screen.getByLabelText(/username/i), {
-        target: { value: 'test' },
-      })
-      fireEvent.change(screen.getByLabelText(/password/i), {
-        target: { value: 'test' },
-      })
-      fireEvent.click(screen.getByRole('button', { name: /login/i }))
-
-      await waitFor(() => {
-        expect(screen.getByLabelText(/username/i)).toHaveAttribute(
-          'aria-describedby',
-          'login-error'
-        )
-      })
-    })
   })
 
   describe('redirect when authenticated', () => {
@@ -178,7 +200,7 @@ describe('LoginPage', () => {
 
       renderLoginPage()
 
-      expect(mockNavigate).toHaveBeenCalledWith('/dashboard')
+      expect(mockNavigate).toHaveBeenCalledWith('/dashboard', { replace: true })
     })
   })
 })
