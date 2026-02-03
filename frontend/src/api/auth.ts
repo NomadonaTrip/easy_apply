@@ -44,3 +44,23 @@ export async function register(data: UserCreate): Promise<UserRead> {
 export async function checkAccountLimit(): Promise<AccountLimit> {
   return apiRequest<AccountLimit>('/auth/account-limit');
 }
+
+export interface LoginRequest {
+  username: string;
+  password: string;
+}
+
+/**
+ * Login with username and password.
+ *
+ * @param data Login credentials
+ * @returns The authenticated user
+ * @throws Error if login fails
+ */
+export async function login(data: LoginRequest): Promise<UserRead> {
+  return apiRequest<UserRead>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify(data),
+    credentials: 'include',
+  });
+}

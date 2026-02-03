@@ -5,8 +5,14 @@
 
 const API_BASE = '/api/v1';
 
+export interface ValidationError {
+  loc: (string | number)[];
+  msg: string;
+  type: string;
+}
+
 export interface ApiError {
-  detail: string | string[];
+  detail: string | ValidationError[];
 }
 
 /**
@@ -19,10 +25,11 @@ export interface ApiError {
  */
 export async function apiRequest<T>(
   endpoint: string,
-  options?: RequestInit
+  options?: RequestInit & { credentials?: RequestCredentials }
 ): Promise<T> {
   const response = await fetch(`${API_BASE}${endpoint}`, {
     ...options,
+    credentials: options?.credentials ?? 'same-origin',
     headers: {
       'Content-Type': 'application/json',
       ...options?.headers,

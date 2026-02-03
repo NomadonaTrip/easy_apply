@@ -117,3 +117,95 @@ async def test_password_is_hashed(client):
         assert user is not None
         assert user.password_hash != "password123"
         assert user.password_hash.startswith("$2b$")  # bcrypt prefix
+
+
+# Login Tests (Story 1-4)
+
+@pytest.mark.asyncio
+async def test_login_success(client):
+    """Successful login returns user data and sets session cookie."""
+    # First register a user
+    await client.post(
+        "/api/v1/auth/register",
+        json={"username": "logintest", "password": "password123"}
+    )
+
+    # Then login
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={"username": "logintest", "password": "password123"}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["username"] == "logintest"
+    assert "id" in data
+    assert "created_at" in data
+    assert "password_hash" not in data
+    assert "session" in response.cookies
+
+
+@pytest.mark.asyncio
+async def test_login_invalid_username(client):
+    """Login with nonexistent username returns 401."""
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={"username": "nonexistent", "password": "password123"}
+    )
+    assert response.status_code == 401
+    assert "invalid" in response.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_login_invalid_password(client):
+    """Login with wrong password returns 401."""
+    # Register first
+    await client.post(
+        "/api/v1/auth/register",
+        json={"username": "pwtest", "password": "password123"}
+    )
+
+    # Login with wrong password
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={"username": "pwtest", "password": "wrongpassword"}
+    )
+    assert response.status_code == 401
+    assert "invalid" in response.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_login_cookie_is_httponly(client):
+    """Session cookie should be HTTP-only."""
+    # Register and login
+    await client.post(
+        "/api/v1/auth/register",
+        json={"username": "cookietest", "password": "password123"}
+    )
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={"username": "cookietest", "password": "password123"}
+    )
+    assert response.status_code == 200
+
+    # Check cookie headers - httponly should be set
+    set_cookie = response.headers.get("set-cookie", "")
+    assert "httponly" in set_cookie.lower()
+
+
+@pytest.mark.asyncio
+async def test_login_cookie_has_samesite_lax(client):
+    """Session cookie should have SameSite=Lax for CSRF protection."""
+    # Register and login
+    await client.post(
+        "/api/v1/auth/register",
+        json={"username": "samesitetest", "password": "password123"}
+    )
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={"username": "samesitetest", "password": "password123"}
+    )
+    assert response.status_code == 200
+
+    # Check cookie headers - samesite=lax should be set
+    set_cookie = response.headers.get("set-cookie", "")
+    assert "samesite=lax" in set_cookie.lower()
