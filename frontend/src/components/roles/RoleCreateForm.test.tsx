@@ -74,6 +74,22 @@ describe('RoleCreateForm', () => {
 
       expect(rolesApi.createRole).not.toHaveBeenCalled();
     });
+
+    it('should show error when name exceeds 100 characters', async () => {
+      renderRoleCreateForm();
+
+      const longName = 'a'.repeat(101);
+      fireEvent.change(screen.getByLabelText(/role name/i), {
+        target: { value: longName },
+      });
+      fireEvent.click(screen.getByRole('button', { name: /add role/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/100 characters or less/i)).toBeInTheDocument();
+      });
+
+      expect(rolesApi.createRole).not.toHaveBeenCalled();
+    });
   });
 
   describe('form submission', () => {

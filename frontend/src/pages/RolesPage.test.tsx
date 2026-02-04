@@ -151,6 +151,26 @@ describe('RolesPage', () => {
         expect(rolesApi.deleteRole).toHaveBeenCalledWith(1);
       });
     });
+
+    it('should display error message when delete fails', async () => {
+      const mockRoles = [
+        { id: 1, user_id: 1, name: 'Product Manager', created_at: '2026-01-01' },
+      ];
+      vi.mocked(rolesApi.getRoles).mockResolvedValue(mockRoles);
+      vi.mocked(rolesApi.deleteRole).mockRejectedValueOnce(new Error('Server error'));
+
+      renderRolesPage();
+
+      await waitFor(() => {
+        expect(screen.getByText('Product Manager')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /delete product manager/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/failed to delete role/i)).toBeInTheDocument();
+      });
+    });
   });
 
   describe('page structure', () => {

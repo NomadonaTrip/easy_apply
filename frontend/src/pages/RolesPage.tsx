@@ -62,7 +62,11 @@ export function RolesPage() {
                     disabled={deleteRole.isPending}
                     aria-label={`Delete ${role.name}`}
                   >
-                    <Trash2 className="h-4 w-4 text-destructive" />
+                    {deleteRole.isPending ? (
+                      <span className="text-xs text-muted-foreground">...</span>
+                    ) : (
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    )}
                   </Button>
                 </li>
               ))}
