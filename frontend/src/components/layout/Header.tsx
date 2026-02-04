@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -18,6 +18,12 @@ export function Header() {
 
         {isAuthenticated && user && (
           <div className="flex items-center gap-4">
+            <Link
+              to="/roles"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Manage Roles
+            </Link>
             <span className="text-sm text-muted-foreground">
               {user.username}
             </span>

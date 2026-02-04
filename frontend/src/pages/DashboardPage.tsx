@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -15,7 +16,11 @@ export function DashboardPage() {
             You have successfully logged in. This is your dashboard.
           </p>
           <p className="text-sm text-muted-foreground mt-4">
-            Role management and application features will be added in future epics.
+            Get started by{' '}
+            <Link to="/roles" className="text-primary hover:underline">
+              managing your roles
+            </Link>
+            {' '}to track different career paths.
           </p>
         </CardContent>
       </Card>

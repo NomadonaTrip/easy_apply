@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { BrowserRouter } from 'react-router-dom';
 import { DashboardPage } from './DashboardPage';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -7,6 +8,14 @@ import { useAuthStore } from '@/stores/authStore';
 vi.mock('@/stores/authStore');
 
 const mockUseAuthStore = useAuthStore as unknown as ReturnType<typeof vi.fn>;
+
+function renderDashboardPage() {
+  return render(
+    <BrowserRouter>
+      <DashboardPage />
+    </BrowserRouter>
+  );
+}
 
 describe('DashboardPage', () => {
   beforeEach(() => {
@@ -18,7 +27,7 @@ describe('DashboardPage', () => {
       user: { id: 1, username: 'testuser', created_at: '2026-01-01' },
     });
 
-    render(<DashboardPage />);
+    renderDashboardPage();
 
     expect(screen.getByText('Welcome, testuser!')).toBeInTheDocument();
   });
@@ -28,20 +37,20 @@ describe('DashboardPage', () => {
       user: null,
     });
 
-    render(<DashboardPage />);
+    renderDashboardPage();
 
     expect(screen.getByText('Welcome!')).toBeInTheDocument();
   });
 
-  it('renders dashboard content', () => {
+  it('renders dashboard content with link to roles', () => {
     mockUseAuthStore.mockReturnValue({
       user: { id: 1, username: 'testuser', created_at: '2026-01-01' },
     });
 
-    render(<DashboardPage />);
+    renderDashboardPage();
 
     expect(screen.getByText(/You have successfully logged in/i)).toBeInTheDocument();
-    expect(screen.getByText(/Role management and application features/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /managing your roles/i })).toBeInTheDocument();
   });
 
 });
