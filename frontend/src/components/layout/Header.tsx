@@ -1,5 +1,6 @@
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { RoleSelector } from '@/components/roles/RoleSelector';
 import { useAuthStore } from '@/stores/authStore';
 
 export function Header() {
@@ -13,8 +14,11 @@ export function Header() {
 
   return (
     <header className="border-b bg-background">
-      <div className="container mx-auto px-4 h-14 flex items-center justify-between">
-        <h1 className="text-lg font-semibold">easy_apply</h1>
+      <div className="container mx-auto px-4 h-[60px] flex items-center justify-between">
+        <div className="flex items-center gap-6">
+          <h1 className="text-lg font-semibold">easy_apply</h1>
+          {isAuthenticated && user && <RoleSelector />}
+        </div>
 
         {isAuthenticated && user && (
           <div className="flex items-center gap-4">

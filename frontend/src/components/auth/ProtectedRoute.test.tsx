@@ -3,17 +3,23 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { ProtectedRoute } from './ProtectedRoute';
 import { useAuthStore } from '@/stores/authStore';
+import { useAutoSelectRole } from '@/hooks/useAutoSelectRole';
 
 // Mock the auth store
 vi.mock('@/stores/authStore');
 
+// Mock the auto-select role hook
+vi.mock('@/hooks/useAutoSelectRole');
+
 const mockUseAuthStore = useAuthStore as unknown as ReturnType<typeof vi.fn>;
+const mockUseAutoSelectRole = vi.mocked(useAutoSelectRole);
 
 function renderWithRouter(initialRoute: string = '/protected') {
   return render(
     <MemoryRouter initialEntries={[initialRoute]}>
       <Routes>
         <Route path="/login" element={<div>Login Page</div>} />
+        <Route path="/roles" element={<div>Roles Page</div>} />
         <Route
           path="/protected"
           element={
@@ -30,6 +36,7 @@ function renderWithRouter(initialRoute: string = '/protected') {
 describe('ProtectedRoute', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseAutoSelectRole.mockReturnValue({ needsRoleCreation: false });
   });
 
   it('shows loading state during auth check', () => {
@@ -79,5 +86,43 @@ describe('ProtectedRoute', () => {
     renderWithRouter('/protected');
 
     expect(screen.getByText('Login Page')).toBeInTheDocument();
+  });
+
+  it('redirects to /roles when needsRoleCreation is true', () => {
+    mockUseAuthStore.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+    });
+    mockUseAutoSelectRole.mockReturnValue({ needsRoleCreation: true });
+
+    renderWithRouter('/protected');
+
+    expect(screen.getByText('Roles Page')).toBeInTheDocument();
+    expect(screen.queryByText('Protected Content')).not.toBeInTheDocument();
+  });
+
+  it('does not redirect when already on /roles page and needsRoleCreation is true', () => {
+    mockUseAuthStore.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+    });
+    mockUseAutoSelectRole.mockReturnValue({ needsRoleCreation: true });
+
+    render(
+      <MemoryRouter initialEntries={['/roles']}>
+        <Routes>
+          <Route
+            path="/roles"
+            element={
+              <ProtectedRoute>
+                <div>Roles Page Content</div>
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Roles Page Content')).toBeInTheDocument();
   });
 });

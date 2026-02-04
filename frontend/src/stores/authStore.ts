@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { logout as logoutApi } from '@/api/auth';
+import { useRoleStore } from '@/stores/roleStore';
 
 export interface User {
   id: number;
@@ -51,6 +52,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoggingOut: true, logoutError: null });
     try {
       await logoutApi();
+      // Clear role state on logout
+      useRoleStore.getState().clearCurrentRole();
       set({ user: null, isAuthenticated: false, isLoggingOut: false });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Logout failed';
@@ -59,6 +62,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       }
       set({ logoutError: message, isLoggingOut: false });
       // Still clear local state for security
+      useRoleStore.getState().clearCurrentRole();
       set({ user: null, isAuthenticated: false });
     }
   },
