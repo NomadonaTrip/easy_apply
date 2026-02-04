@@ -1,12 +1,30 @@
 """Resume upload API endpoints."""
 
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status
+from pydantic import BaseModel
 
 from app.api.deps import get_current_role
 from app.models.role import Role
 from app.models.resume import ResumeRead
-from app.services import resume_service
+from app.services import resume_service, extraction_service
 from app.utils.file_storage import validate_file, save_uploaded_file
+
+
+class ExtractionResponse(BaseModel):
+    """Response model for single resume extraction."""
+
+    message: str
+    skills_count: int
+    accomplishments_count: int
+
+
+class BulkExtractionResponse(BaseModel):
+    """Response model for bulk resume extraction."""
+
+    message: str
+    resumes_processed: int
+    total_skills: int
+    total_accomplishments: int
 
 router = APIRouter(prefix="/resumes", tags=["resumes"])
 
@@ -78,3 +96,51 @@ async def delete_resume(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e)
         )
+
+
+@router.post("/{resume_id}/extract", response_model=ExtractionResponse)
+async def extract_from_resume(
+    resume_id: int,
+    current_role: Role = Depends(get_current_role)
+) -> ExtractionResponse:
+    """
+    Extract skills and accomplishments from a single resume.
+
+    This triggers LLM-based extraction of professional skills and
+    accomplishments from the resume content.
+    """
+    try:
+        result = await extraction_service.extract_from_resume(
+            resume_id, current_role.id
+        )
+
+        return ExtractionResponse(
+            message=f"{result['skills_count']} skills identified. {result['accomplishments_count']} accomplishments extracted.",
+            skills_count=result["skills_count"],
+            accomplishments_count=result["accomplishments_count"]
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+
+
+@router.post("/extract-all", response_model=BulkExtractionResponse)
+async def extract_all_resumes(
+    current_role: Role = Depends(get_current_role)
+) -> BulkExtractionResponse:
+    """
+    Extract from all unprocessed resumes for the current role.
+
+    This triggers LLM-based extraction of skills and accomplishments
+    from all resumes that haven't been processed yet.
+    """
+    result = await extraction_service.extract_all_unprocessed(current_role.id)
+
+    return BulkExtractionResponse(
+        message=f"Processed {result['resumes_processed']} resumes. {result['total_skills']} skills identified. {result['total_accomplishments']} accomplishments extracted.",
+        resumes_processed=result["resumes_processed"],
+        total_skills=result["total_skills"],
+        total_accomplishments=result["total_accomplishments"]
+    )

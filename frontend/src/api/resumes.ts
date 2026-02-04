@@ -21,6 +21,19 @@ export interface Resume {
   processed: boolean;
 }
 
+export interface ExtractionResult {
+  message: string;
+  skills_count: number;
+  accomplishments_count: number;
+}
+
+export interface BulkExtractionResult {
+  message: string;
+  resumes_processed: number;
+  total_skills: number;
+  total_accomplishments: number;
+}
+
 /**
  * Upload a resume file.
  * Uses custom fetch with multipart/form-data (apiRequest doesn't support FormData).
@@ -67,4 +80,22 @@ export async function getResumes(): Promise<Resume[]> {
  */
 export async function deleteResume(resumeId: number): Promise<void> {
   return apiRequest<void>(`/resumes/${resumeId}`, { method: 'DELETE' });
+}
+
+/**
+ * Extract skills and accomplishments from a single resume.
+ */
+export async function extractFromResume(resumeId: number): Promise<ExtractionResult> {
+  return apiRequest<ExtractionResult>(`/resumes/${resumeId}/extract`, {
+    method: 'POST',
+  });
+}
+
+/**
+ * Extract skills and accomplishments from all unprocessed resumes.
+ */
+export async function extractAllResumes(): Promise<BulkExtractionResult> {
+  return apiRequest<BulkExtractionResult>('/resumes/extract-all', {
+    method: 'POST',
+  });
 }

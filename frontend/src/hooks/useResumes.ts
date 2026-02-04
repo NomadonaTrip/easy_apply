@@ -1,6 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRoleStore } from '@/stores/roleStore';
-import { getResumes, uploadResume, deleteResume, type Resume } from '@/api/resumes';
+import {
+  getResumes,
+  uploadResume,
+  deleteResume,
+  extractFromResume,
+  extractAllResumes,
+  type Resume,
+  type ExtractionResult,
+  type BulkExtractionResult,
+} from '@/api/resumes';
 
 /**
  * Hook to fetch all resumes for the current role.
@@ -47,5 +56,41 @@ export function useDeleteResume() {
   });
 }
 
+/**
+ * Hook to extract skills and accomplishments from a single resume.
+ * Automatically invalidates resumes, skills, and accomplishments queries on success.
+ */
+export function useExtractFromResume() {
+  const queryClient = useQueryClient();
+  const roleId = useRoleStore((s) => s.currentRole?.id);
+
+  return useMutation({
+    mutationFn: (resumeId: number) => extractFromResume(resumeId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['resumes', roleId] });
+      queryClient.invalidateQueries({ queryKey: ['skills', roleId] });
+      queryClient.invalidateQueries({ queryKey: ['accomplishments', roleId] });
+    },
+  });
+}
+
+/**
+ * Hook to extract skills and accomplishments from all unprocessed resumes.
+ * Automatically invalidates resumes, skills, and accomplishments queries on success.
+ */
+export function useExtractAllResumes() {
+  const queryClient = useQueryClient();
+  const roleId = useRoleStore((s) => s.currentRole?.id);
+
+  return useMutation({
+    mutationFn: extractAllResumes,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['resumes', roleId] });
+      queryClient.invalidateQueries({ queryKey: ['skills', roleId] });
+      queryClient.invalidateQueries({ queryKey: ['accomplishments', roleId] });
+    },
+  });
+}
+
 // Re-export types for convenience
-export type { Resume };
+export type { Resume, ExtractionResult, BulkExtractionResult };
