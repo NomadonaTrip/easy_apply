@@ -140,6 +140,31 @@ describe('apiRequest', () => {
 
       expect(mockFetch).not.toHaveBeenCalled();
     });
+
+    it('should NOT add X-Role-Id header for /roles with query parameters', async () => {
+      useRoleStore.setState({ currentRole: mockRole });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve([]),
+      });
+
+      await apiRequest('/roles?limit=10');
+
+      const callArgs = mockFetch.mock.calls[0][1];
+      expect(callArgs.headers['X-Role-Id']).toBeUndefined();
+    });
+
+    it('should allow /roles with query parameters without role selected', async () => {
+      useRoleStore.setState({ currentRole: null });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve([]),
+      });
+
+      await expect(apiRequest('/roles?limit=10')).resolves.toEqual([]);
+    });
   });
 
   describe('error handling', () => {

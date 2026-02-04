@@ -42,7 +42,7 @@ export async function apiRequest<T>(
 
   // These endpoints don't require role context
   const isAuthEndpoint = endpoint.startsWith('/auth/');
-  const isRolesEndpoint = /^\/roles(\/\d+)?$/.test(endpoint);
+  const isRolesEndpoint = /^\/roles(\/\d+)?(\?.*)?$/.test(endpoint);
 
   // Require role selection for role-scoped endpoints
   if (!currentRole && !isAuthEndpoint && !isRolesEndpoint) {

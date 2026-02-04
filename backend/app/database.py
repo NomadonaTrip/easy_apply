@@ -47,5 +47,7 @@ async def init_db():
     """Initialize database tables."""
     # Import models here to ensure they're registered with SQLModel metadata
     from app.models.user import User  # noqa: F401
+    from app.models.role import Role  # noqa: F401
+    from app.models.experience import Skill, Accomplishment  # noqa: F401
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)

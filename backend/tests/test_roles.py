@@ -6,21 +6,9 @@ from httpx import ASGITransport, AsyncClient
 from sqlmodel import select
 
 from app.main import app
-from app.database import async_session_maker, init_db
-from app.models.user import User
+from app.database import async_session_maker
 
-
-@pytest_asyncio.fixture(autouse=True)
-async def setup_db():
-    """Initialize DB and clean up users before each test."""
-    await init_db()
-    async with async_session_maker() as session:
-        result = await session.execute(select(User))
-        users = result.scalars().all()
-        for user in users:
-            await session.delete(user)
-        await session.commit()
-    yield
+# Database cleanup is handled by conftest.py's clean_database fixture
 
 
 @pytest_asyncio.fixture

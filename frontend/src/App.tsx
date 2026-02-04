@@ -6,6 +6,7 @@ import { RegisterPage } from '@/pages/RegisterPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { RolesPage } from '@/pages/RolesPage';
+import { ExperiencePage } from '@/pages/ExperiencePage';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { useAuthStore } from '@/stores/authStore';
@@ -46,6 +47,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <RolesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/experience"
+          element={
+            <ProtectedRoute>
+              <ExperiencePage />
             </ProtectedRoute>
           }
         />

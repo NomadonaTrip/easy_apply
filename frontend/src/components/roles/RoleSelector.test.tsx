@@ -46,16 +46,33 @@ describe('RoleSelector', () => {
     useRoleStore.setState({ currentRole: null });
   });
 
-  it('should show loading state while fetching roles', () => {
+  it('should show loading state while fetching roles', async () => {
+    // Use a deferred promise that we control
+    let resolveRoles: (value: typeof mockRoles) => void;
     vi.mocked(rolesApi.getRoles).mockImplementation(
-      () => new Promise(() => {}) // Never resolves
+      () => new Promise((resolve) => {
+        resolveRoles = resolve;
+      })
     );
 
     render(<RoleSelector />, { wrapper: createWrapper() });
 
-    // Should show a loading skeleton
+    // Should show a loading skeleton immediately
     const skeleton = document.querySelector('.animate-pulse');
     expect(skeleton).toBeInTheDocument();
+
+    // Cleanup: resolve the promise to avoid hanging
+    resolveRoles!(mockRoles);
+  });
+
+  it('should show error state when fetching roles fails', async () => {
+    vi.mocked(rolesApi.getRoles).mockRejectedValue(new Error('Network error'));
+
+    render(<RoleSelector />, { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(screen.getByText(/failed to load roles/i)).toBeInTheDocument();
+    });
   });
 
   it('should show message when user has no roles', async () => {

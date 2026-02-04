@@ -7,6 +7,8 @@ from sqlmodel import SQLModel, Field, Relationship
 
 if TYPE_CHECKING:
     from app.models.user import User
+    from app.models.experience import Skill, Accomplishment
+    from app.models.resume import Resume
 
 
 class Role(SQLModel, table=True):
@@ -23,6 +25,11 @@ class Role(SQLModel, table=True):
 
     # Relationship back to User
     user: Optional["User"] = Relationship(back_populates="roles")
+
+    # Relationships to experience data (role-scoped)
+    skills: list["Skill"] = Relationship(back_populates="role")
+    accomplishments: list["Accomplishment"] = Relationship(back_populates="role")
+    resumes: list["Resume"] = Relationship(back_populates="role")
 
     def __init__(self, **data: Any) -> None:
         """Initialize Role with validation.

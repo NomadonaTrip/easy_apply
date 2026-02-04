@@ -8,8 +8,21 @@ import {
 import { useRoles } from '@/hooks/useRoles';
 import { useRoleStore } from '@/stores/roleStore';
 
+/**
+ * Role selector dropdown component for the application header.
+ *
+ * Displays the current role and allows switching between available roles.
+ * Handles loading, error, and empty states gracefully.
+ *
+ * @example
+ * ```tsx
+ * <Header>
+ *   <RoleSelector />
+ * </Header>
+ * ```
+ */
 export function RoleSelector() {
-  const { data: roles, isLoading } = useRoles();
+  const { data: roles, isLoading, error } = useRoles();
   const { currentRole, setCurrentRole } = useRoleStore();
 
   const handleRoleChange = (roleId: string) => {
@@ -25,6 +38,14 @@ export function RoleSelector() {
     );
   }
 
+  if (error) {
+    return (
+      <span className="text-sm text-destructive">
+        Failed to load roles
+      </span>
+    );
+  }
+
   if (!roles || roles.length === 0) {
     return (
       <span className="text-sm text-muted-foreground">
@@ -33,9 +54,12 @@ export function RoleSelector() {
     );
   }
 
+  // Check if current role still exists in the available roles
+  const roleExists = currentRole ? roles.some((r) => r.id === currentRole.id) : true;
+
   return (
     <Select
-      value={currentRole?.id?.toString() || ''}
+      value={roleExists && currentRole?.id ? currentRole.id.toString() : ''}
       onValueChange={handleRoleChange}
     >
       <SelectTrigger className="w-[200px]">
