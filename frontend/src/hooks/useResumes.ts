@@ -58,7 +58,7 @@ export function useDeleteResume() {
 
 /**
  * Hook to extract skills and accomplishments from a single resume.
- * Automatically invalidates resumes, skills, and accomplishments queries on success.
+ * Automatically invalidates resumes, skills, accomplishments, and experience queries on success.
  */
 export function useExtractFromResume() {
   const queryClient = useQueryClient();
@@ -70,13 +70,15 @@ export function useExtractFromResume() {
       queryClient.invalidateQueries({ queryKey: ['resumes', roleId] });
       queryClient.invalidateQueries({ queryKey: ['skills', roleId] });
       queryClient.invalidateQueries({ queryKey: ['accomplishments', roleId] });
+      queryClient.invalidateQueries({ queryKey: ['experience', roleId] });
+      queryClient.invalidateQueries({ queryKey: ['experience-stats', roleId] });
     },
   });
 }
 
 /**
  * Hook to extract skills and accomplishments from all unprocessed resumes.
- * Automatically invalidates resumes, skills, and accomplishments queries on success.
+ * Automatically invalidates resumes, skills, accomplishments, and experience queries on success.
  */
 export function useExtractAllResumes() {
   const queryClient = useQueryClient();
@@ -88,6 +90,8 @@ export function useExtractAllResumes() {
       queryClient.invalidateQueries({ queryKey: ['resumes', roleId] });
       queryClient.invalidateQueries({ queryKey: ['skills', roleId] });
       queryClient.invalidateQueries({ queryKey: ['accomplishments', roleId] });
+      queryClient.invalidateQueries({ queryKey: ['experience', roleId] });
+      queryClient.invalidateQueries({ queryKey: ['experience-stats', roleId] });
     },
   });
 }

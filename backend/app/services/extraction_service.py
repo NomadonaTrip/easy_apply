@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -14,6 +15,30 @@ from app.llm.prompts.extraction import (
 )
 from app.llm import get_llm_provider, Message, Role
 from app.models.experience import SkillCreate, AccomplishmentCreate
+
+
+def _extract_json_from_response(content: str) -> str:
+    """
+    Extract JSON from LLM response, handling markdown code blocks.
+
+    Args:
+        content: Raw LLM response content
+
+    Returns:
+        Cleaned JSON string
+    """
+    if not content:
+        return ""
+
+    # Try to extract JSON from markdown code blocks
+    # Match ```json ... ``` or ``` ... ```
+    code_block_pattern = r'```(?:json)?\s*([\s\S]*?)\s*```'
+    match = re.search(code_block_pattern, content)
+    if match:
+        return match.group(1).strip()
+
+    # If no code block, return content stripped
+    return content.strip()
 
 
 async def extract_skills_with_llm(resume_text: str) -> list[dict]:
@@ -32,11 +57,22 @@ async def extract_skills_with_llm(resume_text: str) -> list[dict]:
     messages = [Message(role=Role.USER, content=prompt)]
     response = await provider.generate(messages)
 
-    # Parse JSON from response
+    # Log raw response for debugging
+    logger.info(f"Skills extraction raw response length: {len(response.content) if response.content else 0}")
+
+    # Parse JSON from response (handle markdown code blocks)
     try:
-        return json.loads(response.content)["skills"]
+        json_str = _extract_json_from_response(response.content)
+        if not json_str:
+            logger.warning(f"Empty response from LLM for skills extraction. Raw: {response.content[:200] if response.content else 'None'}")
+            return []
+        parsed = json.loads(json_str)
+        skills = parsed.get("skills", [])
+        logger.info(f"Extracted {len(skills)} skills from resume")
+        return skills
     except (json.JSONDecodeError, KeyError) as e:
         logger.warning(f"Failed to parse skills from LLM response: {e}")
+        logger.warning(f"Raw response content: {response.content[:500] if response.content else 'None'}")
         return []
 
 
@@ -56,11 +92,22 @@ async def extract_accomplishments_with_llm(resume_text: str) -> list[dict]:
     messages = [Message(role=Role.USER, content=prompt)]
     response = await provider.generate(messages)
 
-    # Parse JSON from response
+    # Log raw response for debugging
+    logger.info(f"Accomplishments extraction raw response length: {len(response.content) if response.content else 0}")
+
+    # Parse JSON from response (handle markdown code blocks)
     try:
-        return json.loads(response.content)["accomplishments"]
+        json_str = _extract_json_from_response(response.content)
+        if not json_str:
+            logger.warning(f"Empty response from LLM for accomplishments extraction. Raw: {response.content[:200] if response.content else 'None'}")
+            return []
+        parsed = json.loads(json_str)
+        accomplishments = parsed.get("accomplishments", [])
+        logger.info(f"Extracted {len(accomplishments)} accomplishments from resume")
+        return accomplishments
     except (json.JSONDecodeError, KeyError) as e:
         logger.warning(f"Failed to parse accomplishments from LLM response: {e}")
+        logger.warning(f"Raw response content: {response.content[:500] if response.content else 'None'}")
         return []
 
 

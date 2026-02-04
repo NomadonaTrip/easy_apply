@@ -18,6 +18,47 @@ from app.services import experience_service
 router = APIRouter(prefix="/experience", tags=["experience"])
 
 
+# Combined experience endpoint
+
+@router.get("")
+async def get_experience(
+    current_role: Role = Depends(get_current_role)
+):
+    """Get all experience data (skills + accomplishments) for the current role."""
+    skills = await experience_service.get_skills(current_role.id)
+    accomplishments = await experience_service.get_accomplishments(current_role.id)
+
+    return {
+        "skills": [SkillRead.model_validate(s) for s in skills],
+        "accomplishments": [AccomplishmentRead.model_validate(a) for a in accomplishments],
+        "skills_count": len(skills),
+        "accomplishments_count": len(accomplishments)
+    }
+
+
+@router.get("/stats")
+async def get_experience_stats(
+    current_role: Role = Depends(get_current_role)
+):
+    """Get experience statistics for the current role."""
+    skills = await experience_service.get_skills(current_role.id)
+    accomplishments = await experience_service.get_accomplishments(current_role.id)
+
+    # Group skills by category
+    categories: dict[str, int] = {}
+    for skill in skills:
+        cat = skill.category or "Uncategorized"
+        if cat not in categories:
+            categories[cat] = 0
+        categories[cat] += 1
+
+    return {
+        "total_skills": len(skills),
+        "total_accomplishments": len(accomplishments),
+        "skills_by_category": categories
+    }
+
+
 # Skills endpoints
 
 @router.get("/skills", response_model=list[SkillRead])

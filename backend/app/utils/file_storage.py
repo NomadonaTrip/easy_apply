@@ -4,8 +4,10 @@ import uuid
 from pathlib import Path
 from fastapi import UploadFile
 
-# Base path for file uploads (relative to project root)
-UPLOAD_DIR = Path("data/uploads")
+from app.config import DATA_DIR
+
+# Base path for file uploads (uses DATA_DIR from config for consistency)
+UPLOAD_DIR = DATA_DIR / "uploads"
 
 # Allowed file extensions
 ALLOWED_EXTENSIONS = {"pdf", "docx"}
