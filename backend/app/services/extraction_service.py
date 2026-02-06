@@ -1,11 +1,19 @@
 """Extraction service for skills and accomplishments from resumes."""
 
+import asyncio
 import json
 import logging
 import re
 from typing import Optional
 
+from google.genai.errors import ClientError
+
 logger = logging.getLogger(__name__)
+
+# Rate limit settings for Gemini API
+_LLM_RETRY_MAX_ATTEMPTS = 3
+_LLM_RETRY_BASE_DELAY = 5.0  # seconds
+_LLM_CALL_DELAY = 1.5  # seconds between sequential LLM calls
 
 from app.services import resume_service, experience_service
 from app.utils.document_parser import extract_text
@@ -41,6 +49,20 @@ def _extract_json_from_response(content: str) -> str:
     return content.strip()
 
 
+async def _generate_with_retry(provider, messages: list[Message]) -> Message:
+    """Call provider.generate with retry on 429 rate limit errors."""
+    for attempt in range(_LLM_RETRY_MAX_ATTEMPTS):
+        try:
+            return await provider.generate(messages)
+        except ClientError as e:
+            if e.code == 429 and attempt < _LLM_RETRY_MAX_ATTEMPTS - 1:
+                delay = _LLM_RETRY_BASE_DELAY * (2 ** attempt)
+                logger.warning(f"Gemini rate limit hit (429), retrying in {delay}s (attempt {attempt + 1}/{_LLM_RETRY_MAX_ATTEMPTS})")
+                await asyncio.sleep(delay)
+            else:
+                raise
+
+
 async def extract_skills_with_llm(resume_text: str) -> list[dict]:
     """
     Use LLM Provider to extract skills from resume text.
@@ -55,7 +77,7 @@ async def extract_skills_with_llm(resume_text: str) -> list[dict]:
     provider = get_llm_provider()
 
     messages = [Message(role=Role.USER, content=prompt)]
-    response = await provider.generate(messages)
+    response = await _generate_with_retry(provider, messages)
 
     # Log raw response for debugging
     logger.info(f"Skills extraction raw response length: {len(response.content) if response.content else 0}")
@@ -90,7 +112,7 @@ async def extract_accomplishments_with_llm(resume_text: str) -> list[dict]:
     provider = get_llm_provider()
 
     messages = [Message(role=Role.USER, content=prompt)]
-    response = await provider.generate(messages)
+    response = await _generate_with_retry(provider, messages)
 
     # Log raw response for debugging
     logger.info(f"Accomplishments extraction raw response length: {len(response.content) if response.content else 0}")
@@ -212,6 +234,9 @@ async def extract_from_resume(resume_id: int, role_id: int) -> dict:
     # Extract skills via LLM Provider
     extracted_skills = await extract_skills_with_llm(resume_text)
 
+    # Delay between sequential LLM calls to avoid rate limits
+    await asyncio.sleep(_LLM_CALL_DELAY)
+
     # Extract accomplishments via LLM Provider
     extracted_accomplishments = await extract_accomplishments_with_llm(resume_text)
 
@@ -263,14 +288,30 @@ async def extract_all_unprocessed(role_id: int) -> dict:
 
     total_skills = 0
     total_accomplishments = 0
+    failed = 0
 
-    for resume in unprocessed:
-        result = await extract_from_resume(resume.id, role_id)
-        total_skills += result["skills_count"]
-        total_accomplishments += result["accomplishments_count"]
+    for i, resume in enumerate(unprocessed):
+        try:
+            result = await extract_from_resume(resume.id, role_id)
+            total_skills += result["skills_count"]
+            total_accomplishments += result["accomplishments_count"]
+        except ClientError as e:
+            if e.code == 429:
+                logger.error(f"Rate limit exhausted for resume {resume.id} after retries, skipping remaining resumes")
+                failed += len(unprocessed) - i
+                break
+            logger.error(f"LLM error processing resume {resume.id}: {e}")
+            failed += 1
+        except Exception as e:
+            logger.error(f"Error processing resume {resume.id}: {e}")
+            failed += 1
+
+        # Delay between resumes to avoid rate limits
+        if i < len(unprocessed) - 1:
+            await asyncio.sleep(_LLM_CALL_DELAY)
 
     return {
-        "resumes_processed": len(unprocessed),
+        "resumes_processed": len(unprocessed) - failed,
         "total_skills": total_skills,
         "total_accomplishments": total_accomplishments
     }

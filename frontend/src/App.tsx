@@ -7,8 +7,10 @@ import { LoginPage } from '@/pages/LoginPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { RolesPage } from '@/pages/RolesPage';
 import { ExperiencePage } from '@/pages/ExperiencePage';
+import { NewApplicationPage } from '@/pages/applications/NewApplicationPage';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
+import { Toaster } from '@/components/ui/sonner';
 import { useAuthStore } from '@/stores/authStore';
 
 function AppRoutes() {
@@ -58,6 +60,14 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/applications/new"
+          element={
+            <ProtectedRoute>
+              <NewApplicationPage />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Default redirect */}
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -74,6 +84,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AppRoutes />
+        <Toaster />
       </BrowserRouter>
     </QueryClientProvider>
   );

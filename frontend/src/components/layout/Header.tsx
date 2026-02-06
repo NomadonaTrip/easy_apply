@@ -23,6 +23,12 @@ export function Header() {
         {isAuthenticated && user && (
           <div className="flex items-center gap-4">
             <Link
+              to="/applications/new"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              New Application
+            </Link>
+            <Link
               to="/experience"
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
             >

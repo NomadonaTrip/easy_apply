@@ -44,4 +44,7 @@ async def update_application(
     data: ApplicationUpdate,
     role: Role = Depends(get_current_role),
 ):
-    return await application_service.update_application(id, role.id, data)
+    application = await application_service.update_application(id, role.id, data)
+    if not application:
+        raise HTTPException(status_code=404, detail="Application not found")
+    return application

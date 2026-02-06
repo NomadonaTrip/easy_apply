@@ -3,7 +3,6 @@
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import HTTPException
 from sqlmodel import select
 
 from app.database import async_session_maker
@@ -20,7 +19,9 @@ async def get_applications(role_id: int) -> list[Application]:
 
     async with async_session_maker() as session:
         result = await session.execute(
-            select(Application).where(Application.role_id == role_id)
+            select(Application)
+            .where(Application.role_id == role_id)
+            .order_by(Application.updated_at.desc())
         )
         applications = result.scalars().all()
         for app in applications:
@@ -67,7 +68,7 @@ async def update_application(
     id: int,
     role_id: int,
     data: ApplicationUpdate,
-) -> Application:
+) -> Optional[Application]:
     """Update with role ownership check."""
     if role_id is None:
         raise ValueError("role_id is required - data isolation violation")
@@ -81,7 +82,7 @@ async def update_application(
         )
         application = result.scalar_one_or_none()
         if not application:
-            raise HTTPException(status_code=404, detail="Application not found")
+            return None
 
         update_data = data.model_dump(exclude_unset=True)
         for key, value in update_data.items():

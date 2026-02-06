@@ -3,6 +3,8 @@
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status
 from pydantic import BaseModel
 
+from google.genai.errors import ClientError
+
 from app.api.deps import get_current_role
 from app.models.role import Role
 from app.models.resume import ResumeRead
@@ -124,6 +126,16 @@ async def extract_from_resume(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e)
         )
+    except ClientError as e:
+        if e.code == 429:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="LLM rate limit exceeded. Please wait a moment and try again."
+            )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="LLM service error. Please try again later."
+        )
 
 
 @router.post("/extract-all", response_model=BulkExtractionResponse)
@@ -136,7 +148,18 @@ async def extract_all_resumes(
     This triggers LLM-based extraction of skills and accomplishments
     from all resumes that haven't been processed yet.
     """
-    result = await extraction_service.extract_all_unprocessed(current_role.id)
+    try:
+        result = await extraction_service.extract_all_unprocessed(current_role.id)
+    except ClientError as e:
+        if e.code == 429:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="LLM rate limit exceeded. Please wait a moment and try again."
+            )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="LLM service error. Please try again later."
+        )
 
     return BulkExtractionResponse(
         message=f"Processed {result['resumes_processed']} resumes. {result['total_skills']} skills identified. {result['total_accomplishments']} accomplishments extracted.",
