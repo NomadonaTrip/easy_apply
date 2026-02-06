@@ -7,6 +7,9 @@ from app.models.experience import (
     Skill, SkillCreate, SkillRead, SkillUpdate,
     Accomplishment, AccomplishmentCreate, AccomplishmentRead, AccomplishmentUpdate,
 )
+from app.models.application import (
+    Application, ApplicationCreate, ApplicationRead, ApplicationUpdate, ApplicationStatus,
+)
 
 __all__ = [
     "User", "UserCreate", "UserRead",
@@ -14,4 +17,5 @@ __all__ = [
     "Resume", "ResumeCreate", "ResumeRead",
     "Skill", "SkillCreate", "SkillRead", "SkillUpdate",
     "Accomplishment", "AccomplishmentCreate", "AccomplishmentRead", "AccomplishmentUpdate",
+    "Application", "ApplicationCreate", "ApplicationRead", "ApplicationUpdate", "ApplicationStatus",
 ]

@@ -22,6 +22,13 @@ async def clean_database():
         from app.models.role import Role
         from app.models.experience import Skill, Accomplishment
         from app.models.resume import Resume
+        from app.models.application import Application
+
+        # Clean up applications (foreign key to roles)
+        result = await session.execute(select(Application))
+        applications = result.scalars().all()
+        for application in applications:
+            await session.delete(application)
 
         # Clean up resumes (foreign key to roles)
         result = await session.execute(select(Resume))

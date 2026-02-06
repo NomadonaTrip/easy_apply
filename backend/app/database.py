@@ -49,5 +49,6 @@ async def init_db():
     from app.models.user import User  # noqa: F401
     from app.models.role import Role  # noqa: F401
     from app.models.experience import Skill, Accomplishment  # noqa: F401
+    from app.models.application import Application  # noqa: F401
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
