@@ -3,20 +3,13 @@
 import asyncio
 import json
 import logging
-import re
 from typing import Optional
 
 from google.genai.errors import ClientError
 
-logger = logging.getLogger(__name__)
-
-# Rate limit settings for Gemini API
-_LLM_RETRY_MAX_ATTEMPTS = 3
-_LLM_RETRY_BASE_DELAY = 5.0  # seconds
-_LLM_CALL_DELAY = 1.5  # seconds between sequential LLM calls
-
 from app.services import resume_service, experience_service
 from app.utils.document_parser import extract_text
+from app.utils.llm_helpers import extract_json_from_response, generate_with_retry
 from app.llm.prompts.extraction import (
     SKILL_EXTRACTION_PROMPT,
     ACCOMPLISHMENT_EXTRACTION_PROMPT,
@@ -24,43 +17,9 @@ from app.llm.prompts.extraction import (
 from app.llm import get_llm_provider, Message, Role
 from app.models.experience import SkillCreate, AccomplishmentCreate
 
+logger = logging.getLogger(__name__)
 
-def _extract_json_from_response(content: str) -> str:
-    """
-    Extract JSON from LLM response, handling markdown code blocks.
-
-    Args:
-        content: Raw LLM response content
-
-    Returns:
-        Cleaned JSON string
-    """
-    if not content:
-        return ""
-
-    # Try to extract JSON from markdown code blocks
-    # Match ```json ... ``` or ``` ... ```
-    code_block_pattern = r'```(?:json)?\s*([\s\S]*?)\s*```'
-    match = re.search(code_block_pattern, content)
-    if match:
-        return match.group(1).strip()
-
-    # If no code block, return content stripped
-    return content.strip()
-
-
-async def _generate_with_retry(provider, messages: list[Message]) -> Message:
-    """Call provider.generate with retry on 429 rate limit errors."""
-    for attempt in range(_LLM_RETRY_MAX_ATTEMPTS):
-        try:
-            return await provider.generate(messages)
-        except ClientError as e:
-            if e.code == 429 and attempt < _LLM_RETRY_MAX_ATTEMPTS - 1:
-                delay = _LLM_RETRY_BASE_DELAY * (2 ** attempt)
-                logger.warning(f"Gemini rate limit hit (429), retrying in {delay}s (attempt {attempt + 1}/{_LLM_RETRY_MAX_ATTEMPTS})")
-                await asyncio.sleep(delay)
-            else:
-                raise
+_LLM_CALL_DELAY = 1.5  # seconds between sequential LLM calls
 
 
 async def extract_skills_with_llm(resume_text: str) -> list[dict]:
@@ -77,14 +36,14 @@ async def extract_skills_with_llm(resume_text: str) -> list[dict]:
     provider = get_llm_provider()
 
     messages = [Message(role=Role.USER, content=prompt)]
-    response = await _generate_with_retry(provider, messages)
+    response = await generate_with_retry(provider, messages)
 
     # Log raw response for debugging
     logger.info(f"Skills extraction raw response length: {len(response.content) if response.content else 0}")
 
     # Parse JSON from response (handle markdown code blocks)
     try:
-        json_str = _extract_json_from_response(response.content)
+        json_str = extract_json_from_response(response.content)
         if not json_str:
             logger.warning(f"Empty response from LLM for skills extraction. Raw: {response.content[:200] if response.content else 'None'}")
             return []
@@ -112,14 +71,14 @@ async def extract_accomplishments_with_llm(resume_text: str) -> list[dict]:
     provider = get_llm_provider()
 
     messages = [Message(role=Role.USER, content=prompt)]
-    response = await _generate_with_retry(provider, messages)
+    response = await generate_with_retry(provider, messages)
 
     # Log raw response for debugging
     logger.info(f"Accomplishments extraction raw response length: {len(response.content) if response.content else 0}")
 
     # Parse JSON from response (handle markdown code blocks)
     try:
-        json_str = _extract_json_from_response(response.content)
+        json_str = extract_json_from_response(response.content)
         if not json_str:
             logger.warning(f"Empty response from LLM for accomplishments extraction. Raw: {response.content[:200] if response.content else 'None'}")
             return []

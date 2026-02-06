@@ -8,6 +8,7 @@ import { DashboardPage } from '@/pages/DashboardPage';
 import { RolesPage } from '@/pages/RolesPage';
 import { ExperiencePage } from '@/pages/ExperiencePage';
 import { NewApplicationPage } from '@/pages/applications/NewApplicationPage';
+import { KeywordsPage } from '@/pages/applications/KeywordsPage';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Toaster } from '@/components/ui/sonner';
@@ -65,6 +66,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <NewApplicationPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/applications/:id/keywords"
+          element={
+            <ProtectedRoute>
+              <KeywordsPage />
             </ProtectedRoute>
           }
         />

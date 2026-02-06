@@ -21,6 +21,18 @@ export interface ApplicationCreate {
   job_url?: string;
 }
 
+export interface Keyword {
+  text: string;
+  priority: number;
+  category: string;
+}
+
+export interface KeywordExtractionResponse {
+  application_id: number;
+  keywords: Keyword[];
+  status: string;
+}
+
 export async function getApplications(): Promise<Application[]> {
   return apiRequest<Application[]>('/applications');
 }
@@ -33,5 +45,11 @@ export async function createApplication(data: ApplicationCreate): Promise<Applic
   return apiRequest<Application>('/applications', {
     method: 'POST',
     body: JSON.stringify(data),
+  });
+}
+
+export async function extractKeywords(id: number): Promise<KeywordExtractionResponse> {
+  return apiRequest<KeywordExtractionResponse>(`/applications/${id}/keywords/extract`, {
+    method: 'POST',
   });
 }

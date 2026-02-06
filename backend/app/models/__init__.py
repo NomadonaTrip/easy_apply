@@ -10,6 +10,9 @@ from app.models.experience import (
 from app.models.application import (
     Application, ApplicationCreate, ApplicationRead, ApplicationUpdate, ApplicationStatus,
 )
+from app.models.keyword import (
+    Keyword, KeywordList, KeywordCategory, KeywordExtractionResponse,
+)
 
 __all__ = [
     "User", "UserCreate", "UserRead",
@@ -18,4 +21,5 @@ __all__ = [
     "Skill", "SkillCreate", "SkillRead", "SkillUpdate",
     "Accomplishment", "AccomplishmentCreate", "AccomplishmentRead", "AccomplishmentUpdate",
     "Application", "ApplicationCreate", "ApplicationRead", "ApplicationUpdate", "ApplicationStatus",
+    "Keyword", "KeywordList", "KeywordCategory", "KeywordExtractionResponse",
 ]
