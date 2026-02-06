@@ -37,6 +37,9 @@ dist/
 *.sqlite
 *.sqlite3
 
+# Uploaded files (user data)
+data/uploads/
+
 # IDE
 .idea/
 .vscode/

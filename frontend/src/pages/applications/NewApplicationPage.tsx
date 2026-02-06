@@ -9,11 +9,11 @@ export function NewApplicationPage() {
 
   const handleSubmit = async (data: { company_name: string; job_posting: string; job_url?: string }) => {
     try {
-      await createMutation.mutateAsync(data);
+      const application = await createMutation.mutateAsync(data);
       toast.success('Application created', {
         description: `${data.company_name} application started`,
       });
-      navigate('/dashboard');
+      navigate(`/applications/${application.id}/keywords`);
     } catch {
       toast.error('Error', {
         description: 'Failed to create application',

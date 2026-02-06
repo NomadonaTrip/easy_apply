@@ -2,10 +2,12 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { RoleSelector } from '@/components/roles/RoleSelector';
 import { useAuthStore } from '@/stores/authStore';
+import { useRoleStore } from '@/stores/roleStore';
 
 export function Header() {
   const navigate = useNavigate();
   const { user, isAuthenticated, logout, isLoggingOut } = useAuthStore();
+  const currentRole = useRoleStore((s) => s.currentRole);
 
   const handleLogout = async () => {
     await logout();
@@ -22,12 +24,14 @@ export function Header() {
 
         {isAuthenticated && user && (
           <div className="flex items-center gap-4">
-            <Link
-              to="/applications/new"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              New Application
-            </Link>
+            {currentRole && (
+              <Link
+                to="/applications/new"
+                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                New Application
+              </Link>
+            )}
             <Link
               to="/experience"
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"

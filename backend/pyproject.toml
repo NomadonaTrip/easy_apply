@@ -19,6 +19,8 @@ dependencies = [
     # Document parsing
     "pypdf>=3.0.0",
     "python-docx>=1.0.0",
+    # Web scraping
+    "playwright>=1.40.0",
 ]
 
 [project.optional-dependencies]

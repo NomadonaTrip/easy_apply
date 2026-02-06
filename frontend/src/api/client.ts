@@ -43,9 +43,10 @@ export async function apiRequest<T>(
   // These endpoints don't require role context
   const isAuthEndpoint = endpoint.startsWith('/auth/');
   const isRolesEndpoint = /^\/roles(\/\d+)?(\?.*)?$/.test(endpoint);
+  const isScrapeEndpoint = endpoint.startsWith('/scrape/');
 
   // Require role selection for role-scoped endpoints
-  if (!currentRole && !isAuthEndpoint && !isRolesEndpoint) {
+  if (!currentRole && !isAuthEndpoint && !isRolesEndpoint && !isScrapeEndpoint) {
     throw new Error('No role selected. Please select a role first.');
   }
 
@@ -55,7 +56,7 @@ export async function apiRequest<T>(
   };
 
   // Add X-Role-Id header for role-scoped requests
-  if (currentRole && !isAuthEndpoint && !isRolesEndpoint) {
+  if (currentRole && !isAuthEndpoint && !isRolesEndpoint && !isScrapeEndpoint) {
     headers['X-Role-Id'] = currentRole.id.toString();
   }
 
