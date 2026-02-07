@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     # Application
     app_name: str = "easy_apply"
     debug: bool = False
+    testing: bool = False
 
     # CORS
     cors_origins: list[str] = ["http://localhost:5173"]
@@ -35,6 +36,8 @@ class Settings(BaseSettings):
     @property
     def database_url(self) -> str:
         """SQLite database URL."""
+        if self.testing:
+            return f"sqlite+aiosqlite:///{DATA_DIR}/test_easy_apply.db"
         return f"sqlite+aiosqlite:///{DATA_DIR}/easy_apply.db"
 
     @property

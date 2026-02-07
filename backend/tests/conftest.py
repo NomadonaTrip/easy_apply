@@ -1,64 +1,56 @@
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
-from sqlmodel import select
+from sqlalchemy import text
 
-from app.main import app
-from app.database import async_session_maker, init_db
+from app.config import settings, DATA_DIR
+
+TEST_DB_PATH = DATA_DIR / "test_easy_apply.db"
 
 
-@pytest.fixture
-def client():
-    return TestClient(app)
+@pytest_asyncio.fixture(scope="session", autouse=True)
+async def setup_test_db():
+    """Switch to test DB, create schema once for the entire session."""
+    # Activate test database URL
+    settings.testing = True
+
+    # Remove old test DB if present
+    if TEST_DB_PATH.exists():
+        TEST_DB_PATH.unlink()
+
+    # Reconfigure engine to use the test URL, then create tables
+    from app.database import configure_engine, init_db
+    configure_engine()
+    await init_db()
+
+    yield
+
+    # Cleanup after all tests
+    if TEST_DB_PATH.exists():
+        TEST_DB_PATH.unlink()
 
 
 @pytest_asyncio.fixture(autouse=True)
 async def clean_database():
-    """Clean all tables before each test (shared fixture for all test files)."""
-    await init_db()
+    """Delete all records before each test.
+
+    Uses raw SQL DELETE in FK dependency order to avoid autoflush issues.
+    """
+    from app.database import async_session_maker
+
     async with async_session_maker() as session:
-        # Import all models for cleanup
-        from app.models.user import User
-        from app.models.role import Role
-        from app.models.experience import Skill, Accomplishment
-        from app.models.resume import Resume
-        from app.models.application import Application
-
-        # Clean up applications (foreign key to roles)
-        result = await session.execute(select(Application))
-        applications = result.scalars().all()
-        for application in applications:
-            await session.delete(application)
-
-        # Clean up resumes (foreign key to roles)
-        result = await session.execute(select(Resume))
-        resumes = result.scalars().all()
-        for resume in resumes:
-            await session.delete(resume)
-
-        # Clean up skills (foreign key to roles)
-        result = await session.execute(select(Skill))
-        skills = result.scalars().all()
-        for skill in skills:
-            await session.delete(skill)
-
-        # Clean up accomplishments (foreign key to roles)
-        result = await session.execute(select(Accomplishment))
-        accomplishments = result.scalars().all()
-        for acc in accomplishments:
-            await session.delete(acc)
-
-        # Clean up roles (foreign key to users)
-        result = await session.execute(select(Role))
-        roles = result.scalars().all()
-        for role in roles:
-            await session.delete(role)
-
-        # Clean up users
-        result = await session.execute(select(User))
-        users = result.scalars().all()
-        for user in users:
-            await session.delete(user)
-
+        # Delete in FK dependency order using raw SQL to avoid ORM autoflush issues
+        await session.execute(text("DELETE FROM applications"))
+        await session.execute(text("DELETE FROM resumes"))
+        await session.execute(text("DELETE FROM skills"))
+        await session.execute(text("DELETE FROM accomplishments"))
+        await session.execute(text("DELETE FROM roles"))
+        await session.execute(text("DELETE FROM users"))
         await session.commit()
     yield
+
+
+@pytest.fixture
+def client():
+    from app.main import app
+    return TestClient(app)

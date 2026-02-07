@@ -1,26 +1,17 @@
 """Tests for API dependencies."""
 
+# Database cleanup is handled by conftest.py's clean_database fixture
+
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
-from sqlmodel import select
 from app.main import app
-from app.database import async_session_maker, init_db
-from app.models.user import User
 from app.services import session_service
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def setup_db():
-    """Initialize DB and clean up users before each test."""
-    await init_db()
-    async with async_session_maker() as session:
-        result = await session.execute(select(User))
-        users = result.scalars().all()
-        for user in users:
-            await session.delete(user)
-        await session.commit()
-    # Clear sessions
+async def clear_sessions():
+    """Clear in-memory session store before each test."""
     session_service._sessions.clear()
     yield
 
