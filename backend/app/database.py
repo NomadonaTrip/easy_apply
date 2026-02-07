@@ -106,5 +106,6 @@ async def init_db():
     from app.models.experience import Skill, Accomplishment  # noqa: F401
     from app.models.application import Application  # noqa: F401
     from app.models.resume import Resume  # noqa: F401
+    from app.models.llm_call_log import LLMCallLog  # noqa: F401
     async with _engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)

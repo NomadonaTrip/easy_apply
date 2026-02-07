@@ -36,6 +36,7 @@ from typing import TYPE_CHECKING
 
 from .base import LLMProvider, Tool
 from .config import LLMConfig
+from .instrumented_provider import InstrumentedProvider
 from .types import (
     GenerationConfig,
     Message,
@@ -54,6 +55,7 @@ __all__ = [
     "LLMProvider",
     "Tool",
     "LLMConfig",
+    "InstrumentedProvider",
     # Types
     "Message",
     "Role",
@@ -102,7 +104,14 @@ def get_llm_provider(config: LLMConfig | None = None) -> LLMProvider:
 
             config = LLMConfig.from_settings(settings)
 
-        _provider_instance = _create_provider(config)
+        concrete = _create_provider(config)
+        # Wrap with instrumentation
+        from .instrumented_provider import DefaultCallLogger
+
+        call_logger = DefaultCallLogger()
+        _provider_instance = InstrumentedProvider(
+            inner=concrete, logger=call_logger, provider_name=config.provider
+        )
 
     return _provider_instance
 

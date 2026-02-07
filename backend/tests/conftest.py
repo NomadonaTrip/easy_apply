@@ -40,6 +40,7 @@ async def clean_database():
 
     async with async_session_maker() as session:
         # Delete in FK dependency order using raw SQL to avoid ORM autoflush issues
+        await session.execute(text("DELETE FROM llm_call_log"))
         await session.execute(text("DELETE FROM applications"))
         await session.execute(text("DELETE FROM resumes"))
         await session.execute(text("DELETE FROM skills"))
