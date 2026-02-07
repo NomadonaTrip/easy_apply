@@ -10,6 +10,9 @@ import { ExperiencePage } from '@/pages/ExperiencePage';
 import { NewApplicationPage } from '@/pages/applications/NewApplicationPage';
 import { KeywordsPage } from '@/pages/applications/KeywordsPage';
 import { ApplicationDetailPage } from '@/pages/applications/ApplicationDetailPage';
+import { ResearchPage } from '@/pages/applications/ResearchPage';
+import { ReviewPage } from '@/pages/applications/ReviewPage';
+import { ExportPage } from '@/pages/applications/ExportPage';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Toaster } from '@/components/ui/sonner';
@@ -25,7 +28,7 @@ function AppRoutes() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-[100vh] min-h-[100dvh]">
         <p className="text-muted-foreground">Loading...</p>
       </div>
     );
@@ -84,6 +87,30 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <KeywordsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/applications/:id/research"
+          element={
+            <ProtectedRoute>
+              <ResearchPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/applications/:id/review"
+          element={
+            <ProtectedRoute>
+              <ReviewPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/applications/:id/export"
+          element={
+            <ProtectedRoute>
+              <ExportPage />
             </ProtectedRoute>
           }
         />

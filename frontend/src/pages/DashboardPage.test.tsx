@@ -11,7 +11,18 @@ import * as applicationsApi from '@/api/applications';
 vi.mock('@/stores/roleStore');
 vi.mock('@/api/applications');
 
+// Mock RoleSelector to avoid nested store calls from Sidebar
+vi.mock('@/components/roles/RoleSelector', () => ({
+  RoleSelector: () => <div data-testid="role-selector">RoleSelector</div>,
+}));
+
 const mockUseRoleStore = useRoleStore as unknown as ReturnType<typeof vi.fn>;
+
+const storeState = (currentRole: { id: number; name: string } | null) => {
+  const state = { currentRole, setCurrentRole: vi.fn() };
+  return (selector?: (s: typeof state) => unknown) =>
+    selector ? selector(state) : state;
+};
 
 const mockApplications: applicationsApi.Application[] = [
   {
@@ -65,55 +76,48 @@ describe('DashboardPage', () => {
   });
 
   it('shows role selection prompt when no role selected', () => {
-    mockUseRoleStore.mockImplementation((selector: any) => selector({ currentRole: null }));
+    mockUseRoleStore.mockImplementation(storeState(null));
     renderDashboard();
     expect(screen.getByText(/Select a role/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Manage Roles/i })).toBeInTheDocument();
   });
 
   it('shows loading state', () => {
-    mockUseRoleStore.mockImplementation((selector: any) =>
-      selector({ currentRole: { id: 1, name: 'Dev' } })
-    );
+    mockUseRoleStore.mockImplementation(storeState({ id: 1, name: 'Dev' }));
     vi.mocked(applicationsApi.getApplications).mockReturnValue(new Promise(() => {}));
     renderDashboard();
     expect(screen.getByText('Loading...')).toBeInTheDocument();
   });
 
   it('shows empty state when no applications exist', async () => {
-    mockUseRoleStore.mockImplementation((selector: any) =>
-      selector({ currentRole: { id: 1, name: 'Dev' } })
-    );
+    mockUseRoleStore.mockImplementation(storeState({ id: 1, name: 'Dev' }));
     vi.mocked(applicationsApi.getApplications).mockResolvedValue([]);
     renderDashboard();
     expect(await screen.findByText(/No applications yet/i)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Create Application/i })).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: /New Application/i }).length).toBeGreaterThanOrEqual(1);
   });
 
   it('lists applications when they exist', async () => {
-    mockUseRoleStore.mockImplementation((selector: any) =>
-      selector({ currentRole: { id: 1, name: 'Dev' } })
-    );
+    mockUseRoleStore.mockImplementation(storeState({ id: 1, name: 'Dev' }));
     vi.mocked(applicationsApi.getApplications).mockResolvedValue(mockApplications);
-    renderDashboard();
-    expect(await screen.findByText('Acme Corp')).toBeInTheDocument();
-    expect(screen.getByText('TechStart')).toBeInTheDocument();
+    const { container } = renderDashboard();
+    // Wait for loading to finish (heading appears after data loads)
+    await screen.findByRole('heading', { name: 'Applications' });
+    // Applications should be visible in either table or card view
+    expect(container.textContent).toContain('Acme Corp');
+    expect(container.textContent).toContain('TechStart');
   });
 
   it('shows New Application button', async () => {
-    mockUseRoleStore.mockImplementation((selector: any) =>
-      selector({ currentRole: { id: 1, name: 'Dev' } })
-    );
+    mockUseRoleStore.mockImplementation(storeState({ id: 1, name: 'Dev' }));
     vi.mocked(applicationsApi.getApplications).mockResolvedValue([]);
     renderDashboard();
     await screen.findByText(/No applications yet/i);
-    expect(screen.getByRole('link', { name: /New Application/i })).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: /New Application/i }).length).toBeGreaterThanOrEqual(1);
   });
 
   it('displays "Applications" heading', async () => {
-    mockUseRoleStore.mockImplementation((selector: any) =>
-      selector({ currentRole: { id: 1, name: 'Dev' } })
-    );
+    mockUseRoleStore.mockImplementation(storeState({ id: 1, name: 'Dev' }));
     vi.mocked(applicationsApi.getApplications).mockResolvedValue([]);
     renderDashboard();
     expect(await screen.findByRole('heading', { name: 'Applications' })).toBeInTheDocument();

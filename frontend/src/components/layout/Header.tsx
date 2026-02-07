@@ -1,13 +1,14 @@
+import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { RoleSelector } from '@/components/roles/RoleSelector';
 import { useAuthStore } from '@/stores/authStore';
-import { useRoleStore } from '@/stores/roleStore';
+import { Menu } from 'lucide-react';
+import { MobileDrawer } from './MobileDrawer';
 
 export function Header() {
   const navigate = useNavigate();
   const { user, isAuthenticated, logout, isLoggingOut } = useAuthStore();
-  const currentRole = useRoleStore((s) => s.currentRole);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const handleLogout = async () => {
     await logout();
@@ -15,47 +16,42 @@ export function Header() {
   };
 
   return (
-    <header className="border-b bg-background">
-      <div className="container mx-auto px-4 h-[60px] flex items-center justify-between">
-        <div className="flex items-center gap-6">
-          <h1 className="text-lg font-semibold">easy_apply</h1>
-          {isAuthenticated && user && <RoleSelector />}
-        </div>
+    <header className="border-b bg-background sticky top-0 z-40">
+      <div className="container mx-auto px-4 h-12 md:h-14 lg:h-[60px] flex items-center justify-between">
+        <Link to="/dashboard" className="flex items-center">
+          <h1 className="text-fluid-lg font-semibold">easy_apply</h1>
+        </Link>
 
         {isAuthenticated && user && (
-          <div className="flex items-center gap-4">
-            {currentRole && (
-              <Link
-                to="/applications/new"
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+          <>
+            {/* Desktop: user info + logout */}
+            <div className="hidden lg:flex items-center gap-4">
+              <span className="text-sm text-muted-foreground">
+                {user.username}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleLogout}
+                disabled={isLoggingOut}
               >
-                New Application
-              </Link>
-            )}
-            <Link
-              to="/experience"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Experience
-            </Link>
-            <Link
-              to="/roles"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Manage Roles
-            </Link>
-            <span className="text-sm text-muted-foreground">
-              {user.username}
-            </span>
+                {isLoggingOut ? 'Logging out...' : 'Logout'}
+              </Button>
+            </div>
+
+            {/* Mobile/Tablet: hamburger */}
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
-              onClick={handleLogout}
-              disabled={isLoggingOut}
+              className="lg:hidden"
+              onClick={() => setDrawerOpen(true)}
+              aria-label="Open menu"
             >
-              {isLoggingOut ? 'Logging out...' : 'Logout'}
+              <Menu className="h-5 w-5" />
             </Button>
-          </div>
+
+            <MobileDrawer open={drawerOpen} onOpenChange={setDrawerOpen} />
+          </>
         )}
       </div>
     </header>

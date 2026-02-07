@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom';
 import { useApplications } from '@/hooks/useApplications';
 import { useRoleStore } from '@/stores/roleStore';
-import { ApplicationCard } from '@/components/dashboard/ApplicationCard';
+import { CommandCenterLayout } from '@/components/layout/CommandCenterLayout';
+import { StatsGrid } from '@/components/dashboard/StatsGrid';
+import { ApplicationTable } from '@/components/dashboard/ApplicationTable';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 
@@ -24,45 +26,47 @@ export function DashboardPage() {
 
   if (isLoading) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-muted-foreground">Loading...</div>
-      </div>
+      <CommandCenterLayout>
+        <div className="p-4 lg:p-8">
+          <div className="text-muted-foreground">Loading...</div>
+        </div>
+      </CommandCenterLayout>
     );
   }
 
-  // Sort by updated_at descending
   const sortedApps = [...(applications || [])].sort(
     (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
   );
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold">Applications</h1>
-        <Link to="/applications/new">
-          <Button>
-            <Plus className="w-4 h-4 mr-2" />
-            New Application
-          </Button>
-        </Link>
-      </div>
-
-      {sortedApps.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-muted-foreground mb-4">
-            No applications yet. Create your first application to get started.
-          </p>
+    <CommandCenterLayout>
+      <div className="p-4 lg:p-8">
+        <div className="flex items-center justify-between mb-6 lg:mb-8">
+          <h1 className="text-fluid-3xl font-bold">Applications</h1>
           <Link to="/applications/new">
-            <Button>Create Application</Button>
+            <Button>
+              <Plus className="w-4 h-4 mr-2" />
+              New Application
+            </Button>
           </Link>
         </div>
-      ) : (
-        <div className="grid gap-4">
-          {sortedApps.map((app) => (
-            <ApplicationCard key={app.id} application={app} />
-          ))}
-        </div>
-      )}
-    </div>
+
+        {sortedApps.length === 0 ? (
+          <div className="flex flex-col items-center justify-center text-center py-12">
+            <p className="text-muted-foreground mb-4">
+              No applications yet
+            </p>
+            <Link to="/applications/new">
+              <Button>New Application</Button>
+            </Link>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <StatsGrid applications={sortedApps} />
+            <ApplicationTable applications={sortedApps} />
+          </div>
+        )}
+      </div>
+    </CommandCenterLayout>
   );
 }

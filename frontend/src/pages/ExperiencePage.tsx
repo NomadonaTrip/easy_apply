@@ -4,6 +4,7 @@ import { ResumeUploader } from '@/components/resumes';
 import { SkillsList, AccomplishmentsList } from '@/components/experience';
 import { useExperienceStats } from '@/hooks/useExperience';
 import { useRoleStore } from '@/stores/roleStore';
+import { Button } from '@/components/ui/button';
 import { Award, FileText, Upload } from 'lucide-react';
 
 export function ExperiencePage() {
@@ -13,24 +14,28 @@ export function ExperiencePage() {
   if (!currentRole) {
     return (
       <div className="container mx-auto p-6">
-        <p className="text-muted-foreground">
-          Please select a role to view your experience database.
-        </p>
+        <div className="flex flex-col items-center justify-center text-center py-12">
+          <p className="text-muted-foreground mb-4">
+            Please select a role to view your experience database.
+          </p>
+        </div>
       </div>
     );
   }
+
+  const hasData = stats && (stats.total_skills > 0 || stats.total_accomplishments > 0);
 
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Experience Database</h1>
+          <h1 className="text-fluid-2xl font-bold">Experience Database</h1>
           <p className="text-muted-foreground">
             Role: {currentRole.name}
           </p>
         </div>
 
-        {stats && (
+        {hasData && stats && (
           <div className="flex gap-4">
             <Card className="px-4 py-2">
               <div className="text-sm text-muted-foreground">Skills</div>
@@ -44,7 +49,18 @@ export function ExperiencePage() {
         )}
       </div>
 
-      <Tabs defaultValue="skills" className="space-y-4">
+      {!hasData && (
+        <div className="flex flex-col items-center justify-center text-center py-12">
+          <p className="text-muted-foreground mb-4">
+            Upload resumes to build your experience database
+          </p>
+          <Button onClick={() => document.querySelector<HTMLElement>('[value="upload"]')?.click()}>
+            Upload
+          </Button>
+        </div>
+      )}
+
+      <Tabs defaultValue={hasData ? "skills" : "upload"} className="space-y-4">
         <TabsList>
           <TabsTrigger value="skills" className="flex items-center gap-2">
             <Award className="h-4 w-4" />

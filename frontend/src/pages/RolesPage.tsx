@@ -26,7 +26,7 @@ export function RolesPage() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <h1 className="text-2xl font-bold">Manage Roles</h1>
+      <h1 className="text-fluid-2xl font-bold">Manage Roles</h1>
 
       <Card>
         <CardHeader>
@@ -72,9 +72,14 @@ export function RolesPage() {
               ))}
             </ul>
           ) : (
-            <p className="text-muted-foreground">
-              No roles yet. Create your first role above.
-            </p>
+            <div className="flex flex-col items-center justify-center text-center py-12">
+              <p className="text-muted-foreground mb-4">
+                Create your first role to get started
+              </p>
+              <Button onClick={() => document.getElementById('role-name')?.focus()}>
+                Create Role
+              </Button>
+            </div>
           )}
         </CardContent>
       </Card>

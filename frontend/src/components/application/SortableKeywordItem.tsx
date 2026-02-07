@@ -21,7 +21,7 @@ const priorityColors: Record<number, string> = {
 
 const categoryColors: Record<string, string> = {
   technical_skill: 'bg-blue-100 text-blue-800',
-  soft_skill: 'bg-purple-100 text-purple-800',
+  soft_skill: 'bg-cyan-100 text-cyan-800',
   experience: 'bg-green-100 text-green-800',
   qualification: 'bg-yellow-100 text-yellow-800',
   tool: 'bg-orange-100 text-orange-800',

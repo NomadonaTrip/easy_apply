@@ -62,7 +62,7 @@ describe('RolesPage', () => {
       renderRolesPage();
 
       await waitFor(() => {
-        expect(screen.getByText(/no roles yet/i)).toBeInTheDocument();
+        expect(screen.getByText(/create your first role to get started/i)).toBeInTheDocument();
       });
     });
   });

@@ -1,12 +1,24 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ApplicationStatusBadge } from '@/components/application/ApplicationStatusBadge';
-import { ApplicationProgress } from '@/components/application/ApplicationProgress';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { WizardStepLayout } from '@/components/layout/WizardStepLayout';
 import { formatDistanceToNow } from 'date-fns';
 import { getApplication } from '@/api/applications';
 import type { ApplicationStatus } from '@/api/applications';
+
+const STATUS_TO_STEP: Record<string, number> = {
+  created: 1,
+  keywords: 2,
+  researching: 3,
+  reviewed: 4,
+  exported: 5,
+  sent: 5,
+  callback: 5,
+  offer: 5,
+  closed: 5,
+};
 
 export function ApplicationDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -16,17 +28,6 @@ export function ApplicationDetailPage() {
     queryKey: ['application', id],
     queryFn: () => getApplication(Number(id)),
   });
-
-  const handleStepClick = (status: ApplicationStatus) => {
-    const routes: Record<string, string> = {
-      created: `/applications/${id}`,
-      keywords: `/applications/${id}/keywords`,
-      researching: `/applications/${id}/research`,
-      reviewed: `/applications/${id}/review`,
-      exported: `/applications/${id}/export`,
-    };
-    if (routes[status]) navigate(routes[status]);
-  };
 
   const handleContinue = () => {
     const nextStep: Record<string, string> = {
@@ -51,12 +52,14 @@ export function ApplicationDetailPage() {
     return <div>Application not found</div>;
   }
 
+  const currentStep = STATUS_TO_STEP[application.status] || 1;
+
   return (
-    <div className="container max-w-4xl py-8">
+    <WizardStepLayout currentStep={currentStep}>
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-3xl font-bold">{application.company_name}</h1>
+            <h1 className="text-fluid-3xl font-bold">{application.company_name}</h1>
             <p className="text-muted-foreground">
               <span title={application.created_at}>
                 Created {formatDistanceToNow(new Date(application.created_at))} ago
@@ -73,11 +76,6 @@ export function ApplicationDetailPage() {
           </div>
           <ApplicationStatusBadge status={application.status} />
         </div>
-
-        <ApplicationProgress
-          currentStatus={application.status}
-          onStepClick={handleStepClick}
-        />
       </div>
 
       <div className="grid gap-6">
@@ -135,6 +133,6 @@ export function ApplicationDetailPage() {
           </Button>
         </div>
       )}
-    </div>
+    </WizardStepLayout>
   );
 }

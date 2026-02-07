@@ -74,9 +74,10 @@ describe('ApplicationDetailPage', () => {
     expect(badge).toBeInTheDocument();
   });
 
-  it('displays the progress stepper', async () => {
+  it('displays the wizard step indicator', async () => {
     renderPage();
-    expect(await screen.findByText('Create')).toBeInTheDocument();
+    // WizardStepLayout shows step labels on desktop; in jsdom both mobile and desktop render
+    expect(await screen.findByText('Input')).toBeInTheDocument();
     expect(screen.getByText('Research')).toBeInTheDocument();
   });
 

@@ -102,7 +102,7 @@ describe('KeywordsPage', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Continue to Research' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Start Research' })).toBeInTheDocument();
     });
   });
 

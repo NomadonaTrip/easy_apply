@@ -32,7 +32,7 @@ const statusConfig: Record<ApplicationStatus, {
   },
   reviewed: {
     label: 'Reviewed',
-    color: 'bg-purple-100 text-purple-800',
+    color: 'bg-cyan-100 text-cyan-800',
     description: 'Research complete, ready for document generation',
   },
   exported: {

@@ -2,12 +2,15 @@ import { useNavigate } from 'react-router-dom';
 import { JobInputForm } from '@/components/application/JobInputForm';
 import { useCreateApplication } from '@/hooks/useApplications';
 import { useExtractKeywords } from '@/hooks/useKeywords';
+import { useRoleStore } from '@/stores/roleStore';
+import { FocusedFlowLayout } from '@/components/layout/FocusedFlowLayout';
 import { toast } from 'sonner';
 
 export function NewApplicationPage() {
   const navigate = useNavigate();
   const createMutation = useCreateApplication();
   const extractMutation = useExtractKeywords();
+  const roleName = useRoleStore((s) => s.currentRole?.name);
 
   const isLoading = createMutation.isPending || extractMutation.isPending;
 
@@ -35,12 +38,12 @@ export function NewApplicationPage() {
   };
 
   return (
-    <div className="container max-w-2xl py-8">
-      <h1 className="text-2xl font-bold mb-6">New Application</h1>
+    <FocusedFlowLayout roleName={roleName} progressStep={1}>
+      <h1 className="text-fluid-2xl font-bold mb-6">New Application</h1>
       <JobInputForm
         onSubmit={handleSubmit}
         isLoading={isLoading}
       />
-    </div>
+    </FocusedFlowLayout>
   );
 }
