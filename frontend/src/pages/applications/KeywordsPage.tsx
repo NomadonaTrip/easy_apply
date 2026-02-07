@@ -1,28 +1,46 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { KeywordList } from '@/components/application/KeywordList';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useSaveKeywords } from '@/hooks/useKeywords';
 import { getApplication } from '@/api/applications';
-import type { Keyword } from '@/api/applications';
+import type { Keyword, KeywordWithId } from '@/api/applications';
+import { Loader2, Check } from 'lucide-react';
 
 export function KeywordsPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [localKeywords, setLocalKeywords] = useState<KeywordWithId[]>([]);
+  const [hasSaved, setHasSaved] = useState(false);
+  const [initialized, setInitialized] = useState(false);
 
   const { data: application, isLoading, isError } = useQuery({
     queryKey: ['application', id],
     queryFn: () => getApplication(Number(id)),
   });
 
-  let keywords: Keyword[] = [];
-  if (application?.keywords) {
+  const { save, isSaving, error } = useSaveKeywords(id!);
+
+  // Initialize local state from server data (once, during render)
+  if (application?.keywords && !initialized) {
     try {
-      keywords = JSON.parse(application.keywords);
+      const parsed: Keyword[] = JSON.parse(application.keywords);
+      setLocalKeywords(
+        parsed.map((k, i) => ({ ...k, _id: `kw-${i}` })),
+      );
+      setInitialized(true);
     } catch {
-      // Corrupted data fallback - keywords will remain empty array
+      // Corrupted data fallback
     }
   }
+
+  const handleReorder = (newKeywords: KeywordWithId[]) => {
+    setLocalKeywords(newKeywords);
+    save(newKeywords.map(({ text, priority, category }) => ({ text, priority, category })));
+    setHasSaved(true);
+  };
 
   const handleContinue = () => {
     navigate(`/applications/${id}/research`);
@@ -51,19 +69,46 @@ export function KeywordsPage() {
 
   return (
     <div className="container max-w-3xl py-8">
-      <h1 className="text-2xl font-bold mb-2">Keywords</h1>
-      <p className="text-muted-foreground mb-6">
-        Review keyword priorities. Higher priority keywords will be emphasized more in your resume.
-      </p>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold">Keywords</h1>
+          <p className="text-muted-foreground">
+            Drag to reorder. Higher priority keywords will be emphasized more.
+          </p>
+        </div>
 
-      {keywords.length > 0 ? (
-        <KeywordList keywords={keywords} />
+        {/* Save status indicator */}
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          {isSaving ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" /> Saving...
+            </>
+          ) : hasSaved ? (
+            <>
+              <Check className="h-4 w-4 text-green-500" /> Saved
+            </>
+          ) : null}
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-4 p-4 bg-destructive/10 text-destructive rounded-md">
+          Failed to save keyword order. Please try again.
+        </div>
+      )}
+
+      {localKeywords.length > 0 ? (
+        <KeywordList keywords={localKeywords} onReorder={handleReorder} />
       ) : (
         <p className="text-muted-foreground">No keywords extracted yet.</p>
       )}
 
       <div className="mt-8 flex justify-end">
-        <Button onClick={handleContinue} className="min-h-[44px]">
+        <Button
+          onClick={handleContinue}
+          disabled={isSaving}
+          className="min-h-[44px]"
+        >
           Continue to Research
         </Button>
       </div>

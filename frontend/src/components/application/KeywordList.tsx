@@ -1,69 +1,101 @@
-import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
-import type { Keyword } from '@/api/applications';
+import { useCallback } from 'react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import type { DragEndEvent } from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
+import { SortableKeywordItem } from './SortableKeywordItem';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
+import type { KeywordWithId } from '@/api/applications';
 
 interface KeywordListProps {
-  keywords: Keyword[];
-  onReorder?: (keywords: Keyword[]) => void;
+  keywords: KeywordWithId[];
+  onReorder: (keywords: KeywordWithId[]) => void;
 }
 
-const priorityColors: Record<number, string> = {
-  10: 'bg-red-500 text-white',
-  9: 'bg-red-400 text-white',
-  8: 'bg-orange-500 text-white',
-  7: 'bg-orange-400 text-white',
-  6: 'bg-yellow-500 text-black',
-  5: 'bg-yellow-400 text-black',
-  4: 'bg-green-400 text-white',
-  3: 'bg-green-300 text-black',
-  2: 'bg-blue-300 text-black',
-  1: 'bg-gray-300 text-black',
-};
+export function KeywordList({ keywords, onReorder }: KeywordListProps) {
+  const isMobile = useMediaQuery('(max-width: 768px)');
 
-const categoryColors: Record<string, string> = {
-  technical_skill: 'bg-blue-100 text-blue-800',
-  soft_skill: 'bg-purple-100 text-purple-800',
-  experience: 'bg-green-100 text-green-800',
-  qualification: 'bg-yellow-100 text-yellow-800',
-  tool: 'bg-orange-100 text-orange-800',
-  domain: 'bg-pink-100 text-pink-800',
-  general: 'bg-gray-100 text-gray-800',
-};
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
 
-export function KeywordList({ keywords }: KeywordListProps) {
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+
+      if (over && active.id !== over.id) {
+        const oldIndex = keywords.findIndex((k) => k._id === active.id);
+        const newIndex = keywords.findIndex((k) => k._id === over.id);
+        const newKeywords = arrayMove(keywords, oldIndex, newIndex);
+        onReorder(newKeywords);
+      }
+    },
+    [keywords, onReorder],
+  );
+
+  const handleMoveUp = useCallback(
+    (index: number) => {
+      if (index === 0) return;
+      const newKeywords = arrayMove(keywords, index, index - 1);
+      onReorder(newKeywords);
+    },
+    [keywords, onReorder],
+  );
+
+  const handleMoveDown = useCallback(
+    (index: number) => {
+      if (index === keywords.length - 1) return;
+      const newKeywords = arrayMove(keywords, index, index + 1);
+      onReorder(newKeywords);
+    },
+    [keywords, onReorder],
+  );
+
   return (
-    <div role="list" className="space-y-3">
-      {keywords.map((keyword, index) => (
-        <div
-          key={keyword.text}
-          role="listitem"
-          className="flex items-center gap-4 p-4 bg-card rounded-lg border min-h-[44px]"
-        >
-          <span className="text-muted-foreground w-6 text-center" aria-hidden="true">
-            {index + 1}
-          </span>
-
-          <div className="flex-1 flex items-center gap-2 flex-wrap">
-            <span className="font-medium">{keyword.text}</span>
-            <Badge
-              variant="outline"
-              className={cn('text-xs', categoryColors[keyword.category] || categoryColors.general)}
-            >
-              {keyword.category.replace(/_/g, ' ')}
-            </Badge>
-          </div>
-
-          <div
-            className={cn(
-              'px-3 py-1 rounded-full text-sm font-medium min-w-[44px] text-center',
-              priorityColors[keyword.priority] || 'bg-gray-200',
-            )}
-            aria-label={`Priority ${keyword.priority} out of 10`}
-          >
-            {keyword.priority}
-          </div>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      modifiers={[restrictToVerticalAxis]}
+      onDragEnd={handleDragEnd}
+    >
+      <SortableContext
+        items={keywords.map((k) => k._id)}
+        strategy={verticalListSortingStrategy}
+      >
+        <div role="list" className="space-y-3">
+          {keywords.map((keyword, index) => (
+            <SortableKeywordItem
+              key={keyword._id}
+              keyword={keyword}
+              index={index}
+              isFirst={index === 0}
+              isLast={index === keywords.length - 1}
+              isMobile={isMobile}
+              onMoveUp={() => handleMoveUp(index)}
+              onMoveDown={() => handleMoveDown(index)}
+            />
+          ))}
         </div>
-      ))}
-    </div>
+      </SortableContext>
+    </DndContext>
   );
 }

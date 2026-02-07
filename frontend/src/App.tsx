@@ -9,9 +9,11 @@ import { RolesPage } from '@/pages/RolesPage';
 import { ExperiencePage } from '@/pages/ExperiencePage';
 import { NewApplicationPage } from '@/pages/applications/NewApplicationPage';
 import { KeywordsPage } from '@/pages/applications/KeywordsPage';
+import { ApplicationDetailPage } from '@/pages/applications/ApplicationDetailPage';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Toaster } from '@/components/ui/sonner';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { useAuthStore } from '@/stores/authStore';
 
 function AppRoutes() {
@@ -70,6 +72,14 @@ function AppRoutes() {
           }
         />
         <Route
+          path="/applications/:id"
+          element={
+            <ProtectedRoute>
+              <ApplicationDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/applications/:id/keywords"
           element={
             <ProtectedRoute>
@@ -92,8 +102,10 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <AppRoutes />
-        <Toaster />
+        <TooltipProvider>
+          <AppRoutes />
+          <Toaster />
+        </TooltipProvider>
       </BrowserRouter>
     </QueryClientProvider>
   );

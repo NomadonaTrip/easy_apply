@@ -298,3 +298,120 @@ class TestExtractKeywordsEndpoint:
 
         response = await client.post("/api/v1/applications/1/keywords/extract")
         assert response.status_code == 400
+
+
+# --- Integration Tests: Update Keywords Order Endpoint ---
+
+
+class TestUpdateKeywordsEndpoint:
+    """Test PUT /api/v1/applications/{id}/keywords endpoint."""
+
+    @pytest.mark.asyncio
+    @patch('app.services.keyword_service.get_llm_provider')
+    async def test_update_keywords_success(self, mock_get_provider, client_with_role, mock_llm_response):
+        """Test updating keyword order preserves all keyword data."""
+        client, role_id = client_with_role
+
+        mock_provider = AsyncMock()
+        mock_provider.generate.return_value = MagicMock(content=mock_llm_response)
+        mock_get_provider.return_value = mock_provider
+
+        # Create application and extract keywords
+        app_response = await client.post("/api/v1/applications", json={
+            "company_name": "Test Corp",
+            "job_posting": "We need a Senior Python Developer with 5+ years experience.",
+        })
+        app_id = app_response.json()["id"]
+        await client.post(f"/api/v1/applications/{app_id}/keywords/extract")
+
+        # Reorder keywords (reverse order)
+        new_order = [
+            {"text": "Communication", "priority": 6, "category": "soft_skill"},
+            {"text": "Analytical Skills", "priority": 7, "category": "soft_skill"},
+            {"text": "Agile", "priority": 8, "category": "tool"},
+            {"text": "Product Management", "priority": 9, "category": "experience"},
+        ]
+
+        response = await client.put(
+            f"/api/v1/applications/{app_id}/keywords",
+            json={"keywords": new_order}
+        )
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["keywords"] is not None
+        keywords = json.loads(data["keywords"])
+        assert len(keywords) == 4
+        assert keywords[0]["text"] == "Communication"
+        assert keywords[3]["text"] == "Product Management"
+
+    @pytest.mark.asyncio
+    async def test_update_keywords_not_found(self, client_with_role):
+        """Test PUT /applications/{id}/keywords returns 404 for nonexistent."""
+        client, _ = client_with_role
+        response = await client.put(
+            "/api/v1/applications/9999/keywords",
+            json={"keywords": [{"text": "Python", "priority": 9, "category": "technical_skill"}]}
+        )
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_update_keywords_invalid_priority(self, client_with_role):
+        """Test PUT /applications/{id}/keywords rejects invalid priority."""
+        client, role_id = client_with_role
+
+        app_response = await client.post("/api/v1/applications", json={
+            "company_name": "Test Corp",
+            "job_posting": "We need a Senior Python Developer with 5+ years experience.",
+        })
+        app_id = app_response.json()["id"]
+
+        response = await client.put(
+            f"/api/v1/applications/{app_id}/keywords",
+            json={"keywords": [{"text": "Python", "priority": 15, "category": "technical_skill"}]}
+        )
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_update_keywords_empty_list(self, client_with_role):
+        """Test PUT /applications/{id}/keywords accepts empty list."""
+        client, role_id = client_with_role
+
+        app_response = await client.post("/api/v1/applications", json={
+            "company_name": "Test Corp",
+            "job_posting": "We need a Senior Python Developer with 5+ years experience.",
+        })
+        app_id = app_response.json()["id"]
+
+        response = await client.put(
+            f"/api/v1/applications/{app_id}/keywords",
+            json={"keywords": []}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        keywords = json.loads(data["keywords"])
+        assert keywords == []
+
+    @pytest.mark.asyncio
+    async def test_update_keywords_role_isolation(self, client_with_role):
+        """Test that keywords cannot be updated across roles."""
+        client, role_id = client_with_role
+
+        # Create application under current role
+        app_response = await client.post("/api/v1/applications", json={
+            "company_name": "Test Corp",
+            "job_posting": "We need a Senior Python Developer with 5+ years experience.",
+        })
+        app_id = app_response.json()["id"]
+
+        # Create a second role
+        role2_response = await client.post("/api/v1/roles", json={"name": "Data Scientist"})
+        role2_id = role2_response.json()["id"]
+
+        # Try to update keywords using the second role
+        client.headers["X-Role-Id"] = str(role2_id)
+        response = await client.put(
+            f"/api/v1/applications/{app_id}/keywords",
+            json={"keywords": [{"text": "Python", "priority": 9, "category": "technical_skill"}]}
+        )
+        assert response.status_code == 404  # Should not find app under different role
