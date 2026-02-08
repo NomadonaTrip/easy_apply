@@ -13,6 +13,7 @@ import { ApplicationDetailPage } from '@/pages/applications/ApplicationDetailPag
 import { ResearchPage } from '@/pages/applications/ResearchPage';
 import { ReviewPage } from '@/pages/applications/ReviewPage';
 import { ExportPage } from '@/pages/applications/ExportPage';
+import { SSETestPage } from '@/pages/SSETestPage';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Toaster } from '@/components/ui/sonner';
@@ -130,7 +131,11 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <TooltipProvider>
-          <AppRoutes />
+          <Routes>
+            {/* Temporary: SSE spike test page (Story 0-5) — outside AppShell to skip auth check */}
+            <Route path="/test/sse" element={<SSETestPage />} />
+            <Route path="*" element={<AppRoutes />} />
+          </Routes>
           <Toaster />
         </TooltipProvider>
       </BrowserRouter>
