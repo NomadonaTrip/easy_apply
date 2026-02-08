@@ -52,3 +52,8 @@ Return a JSON array of accomplishments with this structure:
 
 Return ONLY the JSON, no other text.
 """
+
+from app.llm.prompts import PromptRegistry  # noqa: E402
+
+PromptRegistry.register("skill_extraction", SKILL_EXTRACTION_PROMPT)
+PromptRegistry.register("accomplishment_extraction", ACCOMPLISHMENT_EXTRACTION_PROMPT)

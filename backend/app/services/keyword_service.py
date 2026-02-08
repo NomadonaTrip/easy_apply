@@ -6,6 +6,7 @@ import logging
 from fastapi import HTTPException
 
 from app.llm import get_llm_provider, Message, Role
+from app.llm.prompts import PromptRegistry
 from app.models.keyword import Keyword, KeywordList
 from app.utils.llm_helpers import extract_json_from_response, generate_with_retry
 
@@ -21,25 +22,7 @@ async def extract_keywords(job_posting: str) -> KeywordList:
     try:
         provider = get_llm_provider()
 
-        prompt = f"""Analyze this job posting and extract the most important keywords and skills.
-
-For each keyword:
-1. Identify the specific skill, technology, or qualification
-2. Assign a priority score from 1-10 (10 = essential/mentioned multiple times, 1 = nice-to-have)
-3. Categorize as: technical_skill, soft_skill, experience, qualification, tool, or domain
-
-Return exactly 15-20 keywords in JSON format:
-{{
-    "keywords": [
-        {{"text": "Python", "priority": 9, "category": "technical_skill"}},
-        {{"text": "Leadership", "priority": 7, "category": "soft_skill"}}
-    ]
-}}
-
-Job Posting:
-{job_posting}
-
-Return ONLY valid JSON, no other text."""
+        prompt = PromptRegistry.get("keyword_extraction", job_posting=job_posting)
 
         messages = [Message(role=Role.USER, content=prompt)]
         response = await generate_with_retry(provider, messages)

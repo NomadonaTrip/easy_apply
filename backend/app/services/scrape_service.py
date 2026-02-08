@@ -4,6 +4,7 @@ import logging
 from typing import Optional
 from fastapi import HTTPException
 from app.llm import get_llm_provider, Message, Role
+from app.llm.prompts import PromptRegistry
 from app.utils.url_validator import validate_url
 
 logger = logging.getLogger(__name__)
@@ -82,12 +83,9 @@ async def scrape_job_posting(url: str) -> str:
         # Phase 2: LLM extracts job description from raw page text
         try:
             provider = get_llm_provider()
-            prompt = (
-                "Extract ONLY the job description from this web page text. "
-                "Remove navigation, headers, footers, sidebar content, and unrelated text. "
-                "Return the clean, complete job description text. "
-                "Do NOT wrap the output in code blocks or JSON - return plain text only.\n\n"
-                f"Page content:\n{raw_content[:15000]}"
+            prompt = PromptRegistry.get(
+                "job_description_extraction",
+                raw_content=raw_content[:15000]
             )
 
             messages = [Message(role=Role.USER, content=prompt)]
