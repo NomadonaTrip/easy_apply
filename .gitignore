@@ -67,6 +67,9 @@ logs/
 *.tmp
 *.temp
 
+# Secrets
+token.md
+
 # bmad files and folders
 
 _bmad/
