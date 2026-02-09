@@ -51,6 +51,7 @@ class GenerationConfig:
     top_p: float = 0.95
     top_k: int = 40
     stop_sequences: list[str] = field(default_factory=list)
+    prompt_name: str | None = None  # For observability tracking via InstrumentedProvider
 
 
 @dataclass

@@ -106,6 +106,13 @@ class InstrumentedProvider(LLMProvider):
             prompt_name="unknown",
         )
 
+    def _apply_config_metadata(
+        self, record: CallRecord, config: GenerationConfig | None
+    ) -> None:
+        """Extract observability metadata from config into the call record."""
+        if config and config.prompt_name:
+            record.prompt_name = config.prompt_name
+
     async def generate(
         self,
         messages: list[Message],
@@ -113,6 +120,7 @@ class InstrumentedProvider(LLMProvider):
     ) -> Message:
         """Generate with instrumentation."""
         record = self._create_record()
+        self._apply_config_metadata(record, config)
         start = monotonic()
         try:
             result = await self._inner.generate(messages, config)
@@ -133,6 +141,7 @@ class InstrumentedProvider(LLMProvider):
     ) -> AsyncIterator[str]:
         """Generate stream with instrumentation."""
         record = self._create_record()
+        self._apply_config_metadata(record, config)
         start = monotonic()
         try:
             async for chunk in self._inner.generate_stream(messages, config):
@@ -154,6 +163,7 @@ class InstrumentedProvider(LLMProvider):
     ) -> tuple[Message, list[ToolCall]]:
         """Generate with tools with instrumentation."""
         record = self._create_record()
+        self._apply_config_metadata(record, config)
         start = monotonic()
         try:
             result = await self._inner.generate_with_tools(messages, tools, config)
