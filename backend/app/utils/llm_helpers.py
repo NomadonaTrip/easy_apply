@@ -7,6 +7,8 @@ import re
 from google.genai.errors import ClientError
 
 from app.llm import Message
+from app.llm.base import Tool
+from app.llm.types import ToolCall
 
 logger = logging.getLogger(__name__)
 
@@ -39,11 +41,30 @@ def extract_json_from_response(content: str) -> str:
     return content.strip()
 
 
-async def generate_with_retry(provider, messages: list[Message]) -> Message:
+async def generate_with_retry(provider, messages: list[Message], config=None) -> Message:
     """Call provider.generate with retry on 429 rate limit errors."""
     for attempt in range(LLM_RETRY_MAX_ATTEMPTS):
         try:
-            return await provider.generate(messages)
+            return await provider.generate(messages, config)
+        except ClientError as e:
+            if e.code == 429 and attempt < LLM_RETRY_MAX_ATTEMPTS - 1:
+                delay = LLM_RETRY_BASE_DELAY * (2 ** attempt)
+                logger.warning(
+                    f"Gemini rate limit hit (429), retrying in {delay}s "
+                    f"(attempt {attempt + 1}/{LLM_RETRY_MAX_ATTEMPTS})"
+                )
+                await asyncio.sleep(delay)
+            else:
+                raise
+
+
+async def generate_with_tools_with_retry(
+    provider, messages: list[Message], tools: list[Tool], config=None
+) -> tuple[Message, list[ToolCall]]:
+    """Call provider.generate_with_tools with retry on 429 rate limit errors."""
+    for attempt in range(LLM_RETRY_MAX_ATTEMPTS):
+        try:
+            return await provider.generate_with_tools(messages, tools, config)
         except ClientError as e:
             if e.code == 429 and attempt < LLM_RETRY_MAX_ATTEMPTS - 1:
                 delay = LLM_RETRY_BASE_DELAY * (2 ** attempt)

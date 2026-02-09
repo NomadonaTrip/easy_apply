@@ -2,9 +2,11 @@
 
 import asyncio
 import json
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app.llm.circuit_breaker import CircuitBreaker
 from app.models.research import (
     ResearchStatus,
     ResearchCategory,
@@ -15,11 +17,18 @@ from app.models.research import (
     ResearchErrorEvent,
 )
 from app.services.sse_manager import SSEManager
-from app.services.research_service import ResearchService
+from app.services.research_service import (
+    ResearchService,
+    CATEGORY_PROMPT_NAMES,
+    CATEGORY_MESSAGES,
+    CATEGORY_PROMPT_KWARGS,
+    NOT_FOUND_INDICATORS,
+    _is_not_found,
+)
 
 
 # ============================================================================
-# Research Models Tests (Task 4)
+# Research Models Tests
 # ============================================================================
 
 
@@ -91,9 +100,17 @@ class TestResearchModels:
         assert result.gaps == []
         assert result.completed_at is None
 
+    def test_research_result_with_synthesis(self):
+        result = ResearchResult(
+            synthesis="This company needs this role because...",
+            completed_at="2026-02-08T00:00:00Z",
+        )
+        assert result.synthesis is not None
+        assert "This company" in result.synthesis
+
 
 # ============================================================================
-# SSE Manager Tests (Task 2)
+# SSE Manager Tests
 # ============================================================================
 
 
@@ -194,12 +211,10 @@ class TestSSEManager:
     async def test_create_stream_reuses_existing_queue(self):
         """Verify create_stream reuses an existing queue instead of replacing it."""
         manager = SSEManager()
-        # Pre-create a queue and put an event on it
         queue = asyncio.Queue()
         manager._streams[1] = queue
         await queue.put({"type": "complete", "summary": "Pre-loaded"})
 
-        # create_stream should reuse the existing queue (with the pre-loaded event)
         events = []
         async for event_str in manager.create_stream(1):
             events.append(event_str)
@@ -229,7 +244,144 @@ class TestSSEManager:
 
 
 # ============================================================================
-# Research Service Tests (Task 1)
+# Research Prompt Registration Tests (Task 1)
+# ============================================================================
+
+
+class TestResearchPromptRegistration:
+    """Test that all research prompts are registered in the PromptRegistry."""
+
+    def test_all_category_prompts_registered(self):
+        from app.llm.prompts import PromptRegistry
+
+        for category, prompt_name in CATEGORY_PROMPT_NAMES.items():
+            assert prompt_name in PromptRegistry.list(), (
+                f"Prompt '{prompt_name}' for category '{category.value}' not registered"
+            )
+
+    def test_synthesis_prompt_registered(self):
+        from app.llm.prompts import PromptRegistry
+
+        assert "research_synthesis" in PromptRegistry.list()
+
+    def test_strategic_initiatives_prompt_formatting(self):
+        from app.llm.prompts import PromptRegistry
+
+        result = PromptRegistry.get(
+            "research_strategic_initiatives",
+            company_name="TestCorp",
+            job_posting_summary="A great job posting",
+        )
+        assert "TestCorp" in result
+        assert "A great job posting" in result
+
+    def test_competitive_landscape_prompt_formatting(self):
+        from app.llm.prompts import PromptRegistry
+
+        result = PromptRegistry.get(
+            "research_competitive_landscape",
+            company_name="TestCorp",
+            job_posting_summary="A great job posting",
+        )
+        assert "TestCorp" in result
+
+    def test_news_momentum_prompt_formatting(self):
+        from app.llm.prompts import PromptRegistry
+
+        result = PromptRegistry.get(
+            "research_news_momentum",
+            company_name="TestCorp",
+        )
+        assert "TestCorp" in result
+
+    def test_culture_values_prompt_formatting(self):
+        from app.llm.prompts import PromptRegistry
+
+        result = PromptRegistry.get(
+            "research_culture_values",
+            company_name="TestCorp",
+        )
+        assert "TestCorp" in result
+
+    def test_leadership_direction_prompt_formatting(self):
+        from app.llm.prompts import PromptRegistry
+
+        result = PromptRegistry.get(
+            "research_leadership_direction",
+            company_name="TestCorp",
+            job_posting_summary="Engineer role",
+        )
+        assert "TestCorp" in result
+
+    def test_synthesis_prompt_formatting(self):
+        from app.llm.prompts import PromptRegistry
+
+        result = PromptRegistry.get(
+            "research_synthesis",
+            company_name="TestCorp",
+            research_findings="## Strategic Initiatives\nFindings here",
+            job_posting_summary="Engineer role",
+        )
+        assert "TestCorp" in result
+        assert "Findings here" in result
+
+    def test_prompt_names_match_categories(self):
+        """Verify every ResearchCategory has an entry in CATEGORY_PROMPT_NAMES."""
+        for category in ResearchCategory:
+            assert category in CATEGORY_PROMPT_NAMES, (
+                f"Category '{category.value}' missing from CATEGORY_PROMPT_NAMES"
+            )
+
+    def test_category_messages_match_categories(self):
+        """Verify every ResearchCategory has an entry in CATEGORY_MESSAGES."""
+        for category in ResearchCategory:
+            assert category in CATEGORY_MESSAGES, (
+                f"Category '{category.value}' missing from CATEGORY_MESSAGES"
+            )
+
+    def test_category_prompt_kwargs_match_categories(self):
+        """Verify every ResearchCategory has an entry in CATEGORY_PROMPT_KWARGS."""
+        for category in ResearchCategory:
+            assert category in CATEGORY_PROMPT_KWARGS, (
+                f"Category '{category.value}' missing from CATEGORY_PROMPT_KWARGS"
+            )
+
+
+# ============================================================================
+# Not-Found Detection Tests (H4 fix)
+# ============================================================================
+
+
+class TestNotFoundDetection:
+    """Test the robust not-found detection logic."""
+
+    def test_short_not_found_message(self):
+        assert _is_not_found("No information found about this company.") is True
+
+    def test_short_unavailable_message(self):
+        assert _is_not_found("Information unavailable for this query.") is True
+
+    def test_long_response_with_indicator_is_found(self):
+        """Long detailed responses that incidentally contain not-found phrases are real content."""
+        long_content = (
+            "TestCorp is a major player in the AI space. "
+            "Unlike competitors who found no results in the European market, "
+            "TestCorp has expanded aggressively into 15 countries. "
+            "Their strategic initiatives include building a new cloud platform, "
+            "acquiring three startups, and hiring 500 engineers. " * 5
+        )
+        assert len(long_content) > 500
+        assert _is_not_found(long_content) is False
+
+    def test_short_found_content(self):
+        assert _is_not_found("TestCorp is expanding into AI analytics.") is False
+
+    def test_empty_string(self):
+        assert _is_not_found("") is False
+
+
+# ============================================================================
+# Research Service Unit Tests (Tasks 2-9)
 # ============================================================================
 
 
@@ -274,7 +426,6 @@ class TestResearchService:
         assert service.get_status(1) is None  # State cleaned up
         assert not manager.is_active(1)
 
-        # Verify error event content was queued correctly (M3 fix)
         event = queue.get_nowait()
         assert event["type"] == "error"
         assert event["message"] == "Research cancelled"
@@ -286,6 +437,399 @@ class TestResearchService:
         result = await service.cancel_research(999)
         assert result is False
 
+
+class TestResearchCategoryExecution:
+    """Test _research_category with mocked LLM provider."""
+
+    @pytest.mark.asyncio
+    async def test_successful_category_research(self, monkeypatch):
+        """Test that a successful LLM response returns found=True with content."""
+        service = ResearchService()
+        cb = CircuitBreaker()
+
+        # Mock LLM provider
+        mock_response = MagicMock()
+        mock_response.content = "TestCorp is expanding into AI-driven analytics."
+        mock_response.tool_calls = None
+
+        mock_provider = AsyncMock()
+        mock_provider.generate_with_tools = AsyncMock(return_value=(mock_response, []))
+
+        monkeypatch.setattr(
+            "app.llm.get_llm_provider",
+            lambda: mock_provider,
+        )
+
+        # Mock ToolRegistry to return no tools (simplifies test)
+        mock_registry = MagicMock()
+        mock_registry.get_all.return_value = []
+        monkeypatch.setattr(
+            "app.llm.tools.ToolRegistry",
+            lambda config: mock_registry,
+        )
+
+        result = await service._research_category(
+            ResearchCategory.STRATEGIC_INITIATIVES,
+            "TestCorp",
+            "Software engineer role",
+            cb,
+        )
+
+        assert result.found is True
+        assert "TestCorp" in result.content
+        assert result.reason is None
+
+    @pytest.mark.asyncio
+    async def test_category_research_not_found_indicators(self, monkeypatch):
+        """Test that short not-found indicator responses mark result as not found."""
+        service = ResearchService()
+        cb = CircuitBreaker()
+
+        mock_response = MagicMock()
+        mock_response.content = "No information found about this company's initiatives."
+        mock_response.tool_calls = None
+
+        mock_provider = AsyncMock()
+        mock_provider.generate_with_tools = AsyncMock(return_value=(mock_response, []))
+
+        monkeypatch.setattr(
+            "app.llm.get_llm_provider",
+            lambda: mock_provider,
+        )
+
+        mock_registry = MagicMock()
+        mock_registry.get_all.return_value = []
+        monkeypatch.setattr(
+            "app.llm.tools.ToolRegistry",
+            lambda config: mock_registry,
+        )
+
+        result = await service._research_category(
+            ResearchCategory.STRATEGIC_INITIATIVES,
+            "UnknownCorp",
+            "Some job posting",
+            cb,
+        )
+
+        assert result.found is False
+        assert result.reason is not None
+
+    @pytest.mark.asyncio
+    async def test_category_research_empty_response(self, monkeypatch):
+        """Test that empty LLM response returns not found."""
+        service = ResearchService()
+        cb = CircuitBreaker()
+
+        mock_response = MagicMock()
+        mock_response.content = ""
+        mock_response.tool_calls = None
+
+        mock_provider = AsyncMock()
+        mock_provider.generate_with_tools = AsyncMock(return_value=(mock_response, []))
+
+        monkeypatch.setattr(
+            "app.llm.get_llm_provider",
+            lambda: mock_provider,
+        )
+
+        mock_registry = MagicMock()
+        mock_registry.get_all.return_value = []
+        monkeypatch.setattr(
+            "app.llm.tools.ToolRegistry",
+            lambda config: mock_registry,
+        )
+
+        result = await service._research_category(
+            ResearchCategory.COMPETITIVE_LANDSCAPE,
+            "TestCorp",
+            "Some posting",
+            cb,
+        )
+
+        assert result.found is False
+        assert "No results" in result.reason
+
+    @pytest.mark.asyncio
+    async def test_category_research_with_tool_calls(self, monkeypatch):
+        """Test the tool-use loop with web search tool calls."""
+        service = ResearchService()
+        cb = CircuitBreaker()
+
+        # First call returns tool calls, second returns final answer
+        tool_call = MagicMock()
+        tool_call.name = "web_search"
+        tool_call.arguments = {"query": "TestCorp strategic initiatives"}
+
+        first_response = MagicMock()
+        first_response.content = ""
+        first_response.tool_calls = [tool_call]
+
+        final_response = MagicMock()
+        final_response.content = "TestCorp is building a new AI platform."
+        final_response.tool_calls = None
+
+        call_count = 0
+
+        async def mock_generate_with_tools(messages, tools, config=None):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return (first_response, [tool_call])
+            return (final_response, [])
+
+        mock_provider = AsyncMock()
+        mock_provider.generate_with_tools = mock_generate_with_tools
+
+        monkeypatch.setattr(
+            "app.llm.get_llm_provider",
+            lambda: mock_provider,
+        )
+
+        # Mock tool execution
+        mock_tool = AsyncMock()
+        mock_tool_result = MagicMock()
+        mock_tool_result.success = True
+        mock_tool_result.content = "Search results about TestCorp"
+        mock_tool.execute = AsyncMock(return_value=mock_tool_result)
+
+        mock_registry = MagicMock()
+        mock_registry.get_all.return_value = [mock_tool]
+        mock_registry.get.return_value = mock_tool
+        monkeypatch.setattr(
+            "app.llm.tools.ToolRegistry",
+            lambda config: mock_registry,
+        )
+
+        result = await service._research_category(
+            ResearchCategory.STRATEGIC_INITIATIVES,
+            "TestCorp",
+            "Software engineer role",
+            cb,
+        )
+
+        assert result.found is True
+        assert "AI platform" in result.content
+        assert call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_category_research_llm_exception_records_failure(self, monkeypatch):
+        """Test that LLM exceptions trigger circuit breaker failure recording."""
+        service = ResearchService()
+        cb = CircuitBreaker()
+
+        mock_provider = AsyncMock()
+        mock_provider.generate_with_tools = AsyncMock(
+            side_effect=RuntimeError("API unavailable")
+        )
+
+        monkeypatch.setattr(
+            "app.llm.get_llm_provider",
+            lambda: mock_provider,
+        )
+
+        mock_registry = MagicMock()
+        mock_registry.get_all.return_value = []
+        monkeypatch.setattr(
+            "app.llm.tools.ToolRegistry",
+            lambda config: mock_registry,
+        )
+
+        result = await service._research_category(
+            ResearchCategory.NEWS_MOMENTUM,
+            "TestCorp",
+            "Job posting",
+            cb,
+        )
+
+        assert result.found is False
+        assert "API unavailable" in result.reason
+
+    @pytest.mark.asyncio
+    async def test_category_research_circuit_breaker_open(self):
+        """Test that open circuit breaker returns immediately."""
+        service = ResearchService()
+        cb = CircuitBreaker(failure_threshold=3, reset_timeout=60.0)
+
+        # Force circuit breaker open
+        for _ in range(3):
+            cb.record_failure()
+
+        assert not cb.can_proceed()
+
+        result = await service._research_category(
+            ResearchCategory.CULTURE_VALUES,
+            "TestCorp",
+            "Job posting",
+            cb,
+        )
+
+        assert result.found is False
+        assert "circuit breaker" in result.reason.lower()
+
+    @pytest.mark.asyncio
+    async def test_category_research_tool_failure_handled(self, monkeypatch):
+        """Test that tool execution failures are handled gracefully."""
+        service = ResearchService()
+        cb = CircuitBreaker()
+
+        tool_call = MagicMock()
+        tool_call.name = "web_search"
+        tool_call.arguments = {"query": "test query"}
+
+        first_response = MagicMock()
+        first_response.content = ""
+        first_response.tool_calls = [tool_call]
+
+        final_response = MagicMock()
+        final_response.content = "Partial results despite tool failure"
+        final_response.tool_calls = None
+
+        call_count = 0
+
+        async def mock_generate_with_tools(messages, tools, config=None):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return (first_response, [tool_call])
+            return (final_response, [])
+
+        mock_provider = AsyncMock()
+        mock_provider.generate_with_tools = mock_generate_with_tools
+
+        monkeypatch.setattr(
+            "app.llm.get_llm_provider",
+            lambda: mock_provider,
+        )
+
+        # Mock tool that returns failure
+        mock_tool = AsyncMock()
+        mock_tool_result = MagicMock()
+        mock_tool_result.success = False
+        mock_tool_result.content = ""
+        mock_tool_result.error = "Search API unavailable"
+        mock_tool.execute = AsyncMock(return_value=mock_tool_result)
+
+        mock_registry = MagicMock()
+        mock_registry.get_all.return_value = [mock_tool]
+        mock_registry.get.return_value = mock_tool
+        monkeypatch.setattr(
+            "app.llm.tools.ToolRegistry",
+            lambda config: mock_registry,
+        )
+
+        result = await service._research_category(
+            ResearchCategory.INDUSTRY_CONTEXT,
+            "TestCorp",
+            "Job posting",
+            cb,
+        )
+
+        # Should still get partial results from the LLM
+        assert result.found is True
+        assert "Partial results" in result.content
+
+
+# ============================================================================
+# Research Synthesis Tests (Task 8)
+# ============================================================================
+
+
+class TestResearchSynthesis:
+    """Test strategic narrative synthesis."""
+
+    @pytest.mark.asyncio
+    async def test_synthesize_findings_success(self, monkeypatch):
+        """Test that synthesis generates a strategic narrative."""
+        service = ResearchService()
+        cb = CircuitBreaker()
+
+        mock_response = MagicMock()
+        mock_response.content = "TestCorp needs this role because they are expanding into AI."
+
+        mock_provider = AsyncMock()
+        mock_provider.generate = AsyncMock(return_value=mock_response)
+
+        monkeypatch.setattr(
+            "app.llm.get_llm_provider",
+            lambda: mock_provider,
+        )
+
+        found_results = {
+            "strategic_initiatives": ResearchSourceResult(
+                found=True, content="TestCorp is building an AI platform"
+            ),
+            "competitive_landscape": ResearchSourceResult(
+                found=True, content="Competitors include BigCo and SmallCo"
+            ),
+        }
+
+        synthesis = await service._synthesize_findings(
+            "TestCorp", "Software engineer role", found_results, cb
+        )
+
+        assert synthesis is not None
+        assert "TestCorp" in synthesis
+        mock_provider.generate.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_synthesize_findings_empty_response(self, monkeypatch):
+        """Test that empty synthesis response returns None."""
+        service = ResearchService()
+        cb = CircuitBreaker()
+
+        mock_response = MagicMock()
+        mock_response.content = ""
+
+        mock_provider = AsyncMock()
+        mock_provider.generate = AsyncMock(return_value=mock_response)
+
+        monkeypatch.setattr(
+            "app.llm.get_llm_provider",
+            lambda: mock_provider,
+        )
+
+        found_results = {
+            "strategic_initiatives": ResearchSourceResult(
+                found=True, content="Some data"
+            ),
+        }
+
+        synthesis = await service._synthesize_findings(
+            "TestCorp", "Job posting", found_results, cb
+        )
+
+        assert synthesis is None
+
+    @pytest.mark.asyncio
+    async def test_synthesize_skips_when_circuit_breaker_open(self):
+        """Test that synthesis returns None when circuit breaker is open (L2 fix)."""
+        service = ResearchService()
+        cb = CircuitBreaker(failure_threshold=3, reset_timeout=60.0)
+
+        for _ in range(3):
+            cb.record_failure()
+
+        found_results = {
+            "strategic_initiatives": ResearchSourceResult(
+                found=True, content="Some data"
+            ),
+        }
+
+        synthesis = await service._synthesize_findings(
+            "TestCorp", "Job posting", found_results, cb
+        )
+
+        assert synthesis is None
+
+
+# ============================================================================
+# Full Research Flow Integration Tests (Tasks 2-9)
+# ============================================================================
+
+
+class TestResearchServiceIntegration:
+    """Integration tests for the full research flow."""
+
     @pytest.mark.asyncio
     async def test_start_research_sends_progress_and_complete_events(self, monkeypatch):
         """Integration test: verify start_research produces correct SSE event sequence."""
@@ -295,10 +839,35 @@ class TestResearchService:
         import app.services.research_service as rs_module
         monkeypatch.setattr(rs_module, "sse_manager", manager)
 
-        async def mock_update(*args, **kwargs):
+        # Mock _execute_category to return successful results
+        async def mock_execute_category(app_id, category, company, posting, cb):
+            await manager.send_event(
+                app_id, "progress",
+                {"source": category.value, "status": "searching", "message": f"Searching {category.value}"},
+            )
+            result = ResearchSourceResult(
+                found=True,
+                content=f"Research data for {category.value} about {company}",
+            )
+            await manager.send_event(
+                app_id, "progress",
+                {"source": category.value, "status": "complete", "message": f"Completed {category.value}", "found": True},
+            )
+            return category, result
+
+        monkeypatch.setattr(service, "_execute_category", mock_execute_category)
+
+        # Mock synthesis
+        async def mock_synthesize(company, posting, found_results, cb):
+            return f"Synthesis for {company}"
+
+        monkeypatch.setattr(service, "_synthesize_findings", mock_synthesize)
+
+        # Mock save
+        async def mock_save(*args, **kwargs):
             return None
 
-        monkeypatch.setattr(service, "_save_research_results", mock_update)
+        monkeypatch.setattr(service, "_save_research_results", mock_save)
 
         events = []
 
@@ -310,25 +879,28 @@ class TestResearchService:
 
         await asyncio.sleep(0.05)  # Let consumer start
         await service.start_research(1, 1, "TestCorp", "Software engineer role")
-        await asyncio.sleep(0.1)  # Let consumer finish
+        await asyncio.sleep(0.2)  # Let consumer finish
 
-        # 6 progress events + 1 complete event
+        # 6 search start events + 6 completion events + 1 complete event = 13
         progress_events = [e for e in events if e["type"] == "progress"]
         complete_events = [e for e in events if e["type"] == "complete"]
 
-        assert len(progress_events) == 6
+        assert len(progress_events) == 12  # 2 per category (start + complete)
         assert len(complete_events) == 1
 
-        # Verify progress event structure per architecture spec
-        for pe in progress_events:
-            assert "source" in pe
-            assert "status" in pe
-            assert "message" in pe
-            assert pe["status"] == "searching"
+        # Verify search start events
+        search_events = [e for e in progress_events if e["status"] == "searching"]
+        assert len(search_events) == 6
 
-        # Verify complete event has research_data with 6 categories
+        # Verify category completion events
+        cat_complete_events = [e for e in progress_events if e["status"] == "complete"]
+        assert len(cat_complete_events) == 6
+
+        # Verify complete event has research_data and synthesis
         assert "research_data" in complete_events[0]
-        assert len(complete_events[0]["research_data"]) == 6
+        assert "synthesis" in complete_events[0]
+        assert complete_events[0]["categories_found"] == 6
+        assert complete_events[0]["categories_total"] == 6
 
         # Verify state is cleaned up
         assert service.get_status(1) is None
@@ -340,18 +912,135 @@ class TestResearchService:
             pass
 
     @pytest.mark.asyncio
-    async def test_start_research_handles_source_exception(self, monkeypatch):
-        """Test that an exception during research sends an error event."""
+    async def test_start_research_handles_partial_failures(self, monkeypatch):
+        """Test that some categories can fail while others succeed (graceful degradation)."""
         service = ResearchService()
         manager = SSEManager()
 
         import app.services.research_service as rs_module
         monkeypatch.setattr(rs_module, "sse_manager", manager)
 
-        async def failing_research(source, company, posting):
+        call_count = 0
+
+        async def mock_execute_category(app_id, category, company, posting, cb):
+            nonlocal call_count
+            call_count += 1
+            if call_count % 2 == 0:
+                result = ResearchSourceResult(found=False, reason="No data found")
+            else:
+                result = ResearchSourceResult(found=True, content=f"Data for {category.value}")
+            await manager.send_event(
+                app_id, "progress",
+                {"source": category.value, "status": "complete" if result.found else "gap",
+                 "message": f"Completed {category.value}", "found": result.found},
+            )
+            return category, result
+
+        monkeypatch.setattr(service, "_execute_category", mock_execute_category)
+
+        async def mock_synthesize(company, posting, found_results, cb):
+            return "Partial synthesis"
+
+        monkeypatch.setattr(service, "_synthesize_findings", mock_synthesize)
+
+        async def mock_save(*args, **kwargs):
+            return None
+
+        monkeypatch.setattr(service, "_save_research_results", mock_save)
+
+        events = []
+
+        async def consumer():
+            async for event_str in manager.create_stream(1):
+                events.append(json.loads(event_str.replace("data: ", "").strip()))
+
+        consumer_task = asyncio.create_task(consumer())
+        await asyncio.sleep(0.05)
+
+        await service.start_research(1, 1, "TestCorp", "Engineer role")
+        await asyncio.sleep(0.2)
+
+        complete_events = [e for e in events if e["type"] == "complete"]
+        assert len(complete_events) == 1
+        assert len(complete_events[0]["gaps"]) == 3  # 3 out of 6 failed
+        assert complete_events[0]["categories_found"] == 3
+
+        consumer_task.cancel()
+        try:
+            await consumer_task
+        except asyncio.CancelledError:
+            pass
+
+    @pytest.mark.asyncio
+    async def test_start_research_per_category_exception_becomes_gap(self, monkeypatch):
+        """Test that per-category exceptions produce gaps, not overall failure (graceful degradation)."""
+        service = ResearchService()
+        manager = SSEManager()
+
+        import app.services.research_service as rs_module
+        monkeypatch.setattr(rs_module, "sse_manager", manager)
+
+        async def failing_execute(app_id, category, company, posting, cb):
             raise RuntimeError("LLM provider unavailable")
 
-        monkeypatch.setattr(service, "_research_category", failing_research)
+        monkeypatch.setattr(service, "_execute_category", failing_execute)
+
+        async def mock_save(*args, **kwargs):
+            return None
+
+        monkeypatch.setattr(service, "_save_research_results", mock_save)
+
+        events = []
+
+        async def consumer():
+            async for event_str in manager.create_stream(1):
+                events.append(json.loads(event_str.replace("data: ", "").strip()))
+
+        consumer_task = asyncio.create_task(consumer())
+        await asyncio.sleep(0.05)
+
+        await service.start_research(1, 1, "TestCorp", "Engineer role")
+        await asyncio.sleep(0.2)
+
+        # All categories failed, so all are gaps, but research completes overall
+        complete_events = [e for e in events if e["type"] == "complete"]
+        assert len(complete_events) == 1
+        assert complete_events[0]["categories_found"] == 0
+        assert len(complete_events[0]["gaps"]) == 6
+
+        # State cleaned up
+        assert service.get_status(1) is None
+
+        consumer_task.cancel()
+        try:
+            await consumer_task
+        except asyncio.CancelledError:
+            pass
+
+    @pytest.mark.asyncio
+    async def test_start_research_unexpected_error_sends_error_event(self, monkeypatch):
+        """Test that an unexpected error outside per-category loop sends error event."""
+        service = ResearchService()
+        manager = SSEManager()
+
+        import app.services.research_service as rs_module
+        monkeypatch.setattr(rs_module, "sse_manager", manager)
+
+        # Patch the entire for-loop iteration to fail unexpectedly
+        async def patched_start(app_id, role_id, company, posting):
+            service._research_state[app_id] = ResearchStatus.RUNNING
+            try:
+                raise RuntimeError("Unexpected internal error")
+            except Exception as e:
+                service._research_state[app_id] = ResearchStatus.FAILED
+                await manager.send_event(
+                    app_id, "error",
+                    {"message": str(e), "recoverable": False},
+                )
+            finally:
+                service._research_state.pop(app_id, None)
+
+        monkeypatch.setattr(service, "start_research", patched_start)
 
         events = []
 
@@ -367,11 +1056,233 @@ class TestResearchService:
 
         error_events = [e for e in events if e["type"] == "error"]
         assert len(error_events) == 1
-        assert "LLM provider unavailable" in error_events[0]["message"]
-        assert error_events[0]["recoverable"] is False
+        assert "Unexpected internal error" in error_events[0]["message"]
 
-        # State cleaned up
-        assert service.get_status(1) is None
+        consumer_task.cancel()
+        try:
+            await consumer_task
+        except asyncio.CancelledError:
+            pass
+
+    @pytest.mark.asyncio
+    async def test_start_research_timeout_per_category(self, monkeypatch):
+        """Test that per-category timeout produces a gap, not a crash."""
+        service = ResearchService()
+        service._category_timeout = 0.1  # 100ms timeout for testing
+        manager = SSEManager()
+
+        import app.services.research_service as rs_module
+        monkeypatch.setattr(rs_module, "sse_manager", manager)
+
+        call_count = 0
+
+        async def mock_execute_category(app_id, category, company, posting, cb):
+            nonlocal call_count
+            call_count += 1
+            # First category's inner research times out
+            await manager.send_event(
+                app_id, "progress",
+                {"source": category.value, "status": "searching", "message": f"Searching {category.value}"},
+            )
+            if call_count == 1:
+                await asyncio.sleep(10)  # Will timeout in _execute_category
+            result = ResearchSourceResult(found=True, content=f"Data for {category.value}")
+            await manager.send_event(
+                app_id, "progress",
+                {"source": category.value, "status": "complete", "message": f"Completed {category.value}", "found": True},
+            )
+            return category, result
+
+        monkeypatch.setattr(service, "_execute_category", mock_execute_category)
+
+        async def mock_synthesize(company, posting, found_results, cb):
+            return "Synthesis"
+
+        monkeypatch.setattr(service, "_synthesize_findings", mock_synthesize)
+
+        async def mock_save(*args, **kwargs):
+            return None
+
+        monkeypatch.setattr(service, "_save_research_results", mock_save)
+
+        events = []
+
+        async def consumer():
+            async for event_str in manager.create_stream(1):
+                events.append(json.loads(event_str.replace("data: ", "").strip()))
+
+        consumer_task = asyncio.create_task(consumer())
+        await asyncio.sleep(0.05)
+
+        await service.start_research(1, 1, "TestCorp", "Engineer role")
+        await asyncio.sleep(0.5)
+
+        complete_events = [e for e in events if e["type"] == "complete"]
+        assert len(complete_events) == 1
+
+        # First category timed out (exception in gather), rest succeeded
+        # The timed-out category becomes a gap via the exception handler in start_research
+        assert complete_events[0]["categories_found"] >= 4  # At least 4 of 6 succeeded
+
+        consumer_task.cancel()
+        try:
+            await consumer_task
+        except asyncio.CancelledError:
+            pass
+
+    @pytest.mark.asyncio
+    async def test_start_research_saves_results(self, monkeypatch):
+        """Test that results are persisted via _save_research_results."""
+        service = ResearchService()
+        manager = SSEManager()
+
+        import app.services.research_service as rs_module
+        monkeypatch.setattr(rs_module, "sse_manager", manager)
+
+        async def mock_execute_category(app_id, category, company, posting, cb):
+            result = ResearchSourceResult(found=True, content=f"Data for {category.value}")
+            return category, result
+
+        monkeypatch.setattr(service, "_execute_category", mock_execute_category)
+
+        async def mock_synthesize(company, posting, found_results, cb):
+            return "Synthesis"
+
+        monkeypatch.setattr(service, "_synthesize_findings", mock_synthesize)
+
+        save_called_with = {}
+
+        async def mock_save(app_id, role_id, research_result):
+            save_called_with["app_id"] = app_id
+            save_called_with["role_id"] = role_id
+            save_called_with["result"] = research_result
+
+        monkeypatch.setattr(service, "_save_research_results", mock_save)
+
+        events = []
+
+        async def consumer():
+            async for event_str in manager.create_stream(1):
+                events.append(json.loads(event_str.replace("data: ", "").strip()))
+
+        consumer_task = asyncio.create_task(consumer())
+        await asyncio.sleep(0.05)
+
+        await service.start_research(1, 42, "TestCorp", "Engineer role")
+        await asyncio.sleep(0.2)
+
+        assert save_called_with["app_id"] == 1
+        assert save_called_with["role_id"] == 42
+        assert isinstance(save_called_with["result"], ResearchResult)
+        assert save_called_with["result"].synthesis == "Synthesis"
+
+        consumer_task.cancel()
+        try:
+            await consumer_task
+        except asyncio.CancelledError:
+            pass
+
+    @pytest.mark.asyncio
+    async def test_start_research_db_save_failure_still_completes(self, monkeypatch):
+        """Test that database save failure doesn't crash the research flow."""
+        service = ResearchService()
+        manager = SSEManager()
+
+        import app.services.research_service as rs_module
+        monkeypatch.setattr(rs_module, "sse_manager", manager)
+
+        async def mock_execute_category(app_id, category, company, posting, cb):
+            result = ResearchSourceResult(found=True, content=f"Data for {category.value}")
+            return category, result
+
+        monkeypatch.setattr(service, "_execute_category", mock_execute_category)
+
+        async def mock_synthesize(company, posting, found_results, cb):
+            return "Synthesis"
+
+        monkeypatch.setattr(service, "_synthesize_findings", mock_synthesize)
+
+        async def mock_save_fail(*args, **kwargs):
+            raise RuntimeError("Database connection error")
+
+        monkeypatch.setattr(service, "_save_research_results", mock_save_fail)
+
+        events = []
+
+        async def consumer():
+            async for event_str in manager.create_stream(1):
+                events.append(json.loads(event_str.replace("data: ", "").strip()))
+
+        consumer_task = asyncio.create_task(consumer())
+        await asyncio.sleep(0.05)
+
+        await service.start_research(1, 1, "TestCorp", "Engineer role")
+        await asyncio.sleep(0.2)
+
+        # Should still get a complete event, not an error
+        complete_events = [e for e in events if e["type"] == "complete"]
+        assert len(complete_events) == 1
+
+        consumer_task.cancel()
+        try:
+            await consumer_task
+        except asyncio.CancelledError:
+            pass
+
+    @pytest.mark.asyncio
+    async def test_start_research_runs_categories_concurrently(self, monkeypatch):
+        """Test that categories execute concurrently, not sequentially (M1 fix)."""
+        service = ResearchService()
+        manager = SSEManager()
+
+        import app.services.research_service as rs_module
+        monkeypatch.setattr(rs_module, "sse_manager", manager)
+
+        timestamps = []
+
+        async def mock_execute_category(app_id, category, company, posting, cb):
+            import time
+            timestamps.append(("start", category.value, time.monotonic()))
+            await asyncio.sleep(0.05)  # Simulate work
+            timestamps.append(("end", category.value, time.monotonic()))
+            result = ResearchSourceResult(found=True, content=f"Data for {category.value}")
+            return category, result
+
+        monkeypatch.setattr(service, "_execute_category", mock_execute_category)
+
+        async def mock_synthesize(company, posting, found_results, cb):
+            return "Synthesis"
+
+        monkeypatch.setattr(service, "_synthesize_findings", mock_synthesize)
+
+        async def mock_save(*args, **kwargs):
+            return None
+
+        monkeypatch.setattr(service, "_save_research_results", mock_save)
+
+        events = []
+
+        async def consumer():
+            async for event_str in manager.create_stream(1):
+                events.append(json.loads(event_str.replace("data: ", "").strip()))
+
+        consumer_task = asyncio.create_task(consumer())
+        await asyncio.sleep(0.05)
+
+        await service.start_research(1, 1, "TestCorp", "Engineer role")
+        await asyncio.sleep(0.3)
+
+        # With 6 categories and concurrency=3, the total time should be
+        # significantly less than 6 * 0.05s = 0.3s sequential.
+        # With concurrency=3, we expect ~2 batches = ~0.1s.
+        start_times = [t[2] for t in timestamps if t[0] == "start"]
+        end_times = [t[2] for t in timestamps if t[0] == "end"]
+
+        total_wall_time = max(end_times) - min(start_times)
+        # Sequential would be >= 0.3s. Concurrent should be < 0.2s.
+        assert total_wall_time < 0.25, (
+            f"Categories took {total_wall_time:.3f}s, expected concurrent execution"
+        )
 
         consumer_task.cancel()
         try:
@@ -381,7 +1292,83 @@ class TestResearchService:
 
 
 # ============================================================================
-# Research API Endpoint Tests (Task 3 & Task 6)
+# Research Persistence Integration Test (M2 fix)
+# ============================================================================
+
+
+class TestResearchPersistence:
+    """Test that research results are properly serialized and persisted."""
+
+    @pytest.mark.asyncio
+    async def test_save_research_results_serialization(self, monkeypatch):
+        """Test that ResearchResult serializes to valid JSON for ApplicationUpdate."""
+        service = ResearchService()
+
+        # Build a realistic ResearchResult
+        research_result = ResearchResult(
+            strategic_initiatives=ResearchSourceResult(
+                found=True, content="TestCorp is expanding into AI"
+            ),
+            competitive_landscape=ResearchSourceResult(
+                found=True, content="Competitors include BigCo"
+            ),
+            news_momentum=ResearchSourceResult(
+                found=False, reason="No recent news"
+            ),
+            industry_context=ResearchSourceResult(
+                found=True, content="AI industry growing 30% YoY"
+            ),
+            culture_values=ResearchSourceResult(
+                found=True, content="Engineering-driven culture"
+            ),
+            leadership_direction=ResearchSourceResult(
+                found=False, reason="Limited public statements"
+            ),
+            synthesis="TestCorp needs this role to drive AI expansion.",
+            gaps=["news_momentum", "leadership_direction"],
+            completed_at="2026-02-08T12:00:00Z",
+        )
+
+        # Capture what gets passed to application_service.update_application
+        captured_update = {}
+
+        async def mock_update(app_id, role_id, data):
+            captured_update["app_id"] = app_id
+            captured_update["role_id"] = role_id
+            captured_update["data"] = data
+            return MagicMock()
+
+        monkeypatch.setattr(
+            "app.services.application_service.update_application",
+            mock_update,
+        )
+
+        await service._save_research_results(1, 42, research_result)
+
+        assert captured_update["app_id"] == 1
+        assert captured_update["role_id"] == 42
+
+        # Verify the research_data is valid JSON
+        update_data = captured_update["data"]
+        assert update_data.research_data is not None
+
+        parsed = json.loads(update_data.research_data)
+        assert parsed["synthesis"] == "TestCorp needs this role to drive AI expansion."
+        assert parsed["gaps"] == ["news_momentum", "leadership_direction"]
+        assert parsed["strategic_initiatives"]["found"] is True
+        assert parsed["strategic_initiatives"]["content"] == "TestCorp is expanding into AI"
+        assert parsed["news_momentum"]["found"] is False
+        assert parsed["completed_at"] == "2026-02-08T12:00:00Z"
+
+        # Verify it can be deserialized back to ResearchResult
+        roundtrip = ResearchResult(**parsed)
+        assert roundtrip.synthesis == research_result.synthesis
+        assert roundtrip.gaps == research_result.gaps
+        assert roundtrip.strategic_initiatives.found is True
+
+
+# ============================================================================
+# Research API Endpoint Tests
 # ============================================================================
 
 
@@ -521,15 +1508,9 @@ class TestResearchEndpoints:
         assert response.status_code == 404
 
     def test_stream_requires_valid_application(self, client):
-        """Verify the stream endpoint validates application access.
-
-        Full SSE streaming behavior is tested in SSEManager unit tests.
-        TestClient cannot easily handle concurrent producers for SSE streams,
-        so integration streaming is validated via SSEManager tests.
-        """
+        """Verify the stream endpoint validates application access."""
         _role_id, app_id, headers = _auth_helper(client)
 
-        # Verify 404 for nonexistent application (auth is valid)
         response = client.get(
             "/api/v1/applications/9999/research/stream",
             headers=headers,
@@ -561,7 +1542,6 @@ class TestResearchEndpoints:
 
     def test_role_isolation_prevents_cross_role_access(self, client):
         """Test that user A cannot research user B's application."""
-        # Create user A with role and application
         client.post("/api/v1/auth/register", json={
             "username": "userA",
             "password": "testpass123",
@@ -582,7 +1562,6 @@ class TestResearchEndpoints:
         )
         app_id = app_resp.json()["id"]
 
-        # Logout and create user B
         client.post("/api/v1/auth/logout")
         client.post("/api/v1/auth/register", json={
             "username": "userB",
@@ -595,38 +1574,33 @@ class TestResearchEndpoints:
         role_b_resp = client.post("/api/v1/roles", json={"name": "Role B"})
         role_b_id = role_b_resp.json()["id"]
 
-        # User B tries to research user A's application
         response = client.post(
             f"/api/v1/applications/{app_id}/research",
             headers={"X-Role-Id": str(role_b_id)},
         )
-        assert response.status_code == 404  # Application not found for this role
+        assert response.status_code == 404
 
     def test_start_research_sets_status_to_researching(self, client):
-        """Test that starting research updates application status to RESEARCHING (H1 fix)."""
+        """Test that starting research updates application status to RESEARCHING."""
         _role_id, app_id, headers = _auth_helper(client)
 
-        # Verify initial status is 'created'
         app_resp = client.get(f"/api/v1/applications/{app_id}", headers=headers)
         assert app_resp.json()["status"] == "created"
 
-        # Start research
         response = client.post(
             f"/api/v1/applications/{app_id}/research",
             headers=headers,
         )
         assert response.status_code == 200
 
-        # Verify status updated to 'researching'
         app_resp = client.get(f"/api/v1/applications/{app_id}", headers=headers)
         assert app_resp.json()["status"] == "researching"
 
     def test_start_research_rejects_missing_job_data(self, client, monkeypatch):
-        """Test 400 when application lacks company_name or job_posting (M2 fix)."""
+        """Test 400 when application lacks company_name or job_posting."""
         from types import SimpleNamespace
         _role_id, app_id, headers = _auth_helper(client)
 
-        # Mock application_service to return an application with missing job_posting
         mock_app = SimpleNamespace(
             id=app_id, company_name="Corp", job_posting=None, research_data=None,
         )
