@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from app.models.application import ApplicationUpdate
-from app.models.research import ResearchStatus, ResearchSource, ResearchResult, ResearchSourceResult
+from app.models.research import ResearchStatus, ResearchCategory, ResearchResult, ResearchSourceResult
 from app.services.sse_manager import sse_manager
 from app.services import application_service
 
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class ResearchService:
-    """Orchestrates company research with progress streaming."""
+    """Orchestrates strategic company research with progress streaming."""
 
     def __init__(self):
         self._research_state: dict[int, ResearchStatus] = {}
@@ -62,32 +62,31 @@ class ResearchService:
         self._research_state[application_id] = ResearchStatus.RUNNING
 
         try:
-            sources = [
-                (ResearchSource.PROFILE, f"Researching {company_name} company profile..."),
-                (ResearchSource.CULTURE, f"Analyzing {company_name} culture and values..."),
-                (ResearchSource.GLASSDOOR, f"Checking Glassdoor reviews for {company_name}..."),
-                (ResearchSource.LINKEDIN, f"Analyzing {company_name} LinkedIn presence..."),
-                (ResearchSource.NEWS, f"Searching recent news about {company_name}..."),
-                (ResearchSource.LEADERSHIP, f"Researching {company_name} leadership team..."),
-                (ResearchSource.COMPETITORS, f"Analyzing {company_name} competitors and industry..."),
+            categories = [
+                (ResearchCategory.STRATEGIC_INITIATIVES, f"Investigating {company_name} strategic initiatives..."),
+                (ResearchCategory.COMPETITIVE_LANDSCAPE, f"Analyzing {company_name} competitive landscape..."),
+                (ResearchCategory.NEWS_MOMENTUM, f"Searching recent news and momentum for {company_name}..."),
+                (ResearchCategory.INDUSTRY_CONTEXT, f"Researching industry context for {company_name}..."),
+                (ResearchCategory.CULTURE_VALUES, f"Researching {company_name} culture and values..."),
+                (ResearchCategory.LEADERSHIP_DIRECTION, f"Analyzing {company_name} leadership direction..."),
             ]
 
             results = {}
             gaps = []
 
-            for source, message in sources:
+            for category, message in categories:
                 await sse_manager.send_event(
                     application_id,
                     "progress",
-                    {"source": source.value, "status": "searching", "message": message},
+                    {"source": category.value, "status": "searching", "message": message},
                 )
 
-                # Execute research for this source (Story 4-2 implements actual LLM research)
-                result = await self._research_source(source, company_name, job_posting)
-                results[source.value] = result
+                # Execute research for this category (Story 4-2 implements actual LLM research)
+                result = await self._research_category(category, company_name, job_posting)
+                results[category.value] = result
 
                 if not result.found:
-                    gaps.append(source.value)
+                    gaps.append(category.value)
 
                 await asyncio.sleep(0.5)
 
@@ -95,7 +94,7 @@ class ResearchService:
             research_result = ResearchResult(
                 gaps=gaps,
                 completed_at=datetime.now(timezone.utc).isoformat(),
-                **{source.value: results[source.value] for source in ResearchSource if source.value in results},
+                **{cat.value: results[cat.value] for cat in ResearchCategory if cat.value in results},
             )
 
             # Persist research data to application (H2: no redundant status set)
@@ -129,16 +128,16 @@ class ResearchService:
         finally:
             self._research_state.pop(application_id, None)
 
-    async def _research_source(
+    async def _research_category(
         self,
-        source: ResearchSource,
+        category: ResearchCategory,
         company_name: str,
         job_posting: str,
     ) -> ResearchSourceResult:
-        """Research a single source. Placeholder for Story 4-2 LLM integration."""
+        """Research a single strategic category. Placeholder for Story 4-2 LLM integration."""
         return ResearchSourceResult(
             found=True,
-            content=f"Placeholder research data for {source.value} about {company_name}",
+            content=f"Placeholder research data for {category.value} about {company_name}",
         )
 
     async def _save_research_results(

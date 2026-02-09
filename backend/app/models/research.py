@@ -13,18 +13,17 @@ class ResearchStatus(str, Enum):
     FAILED = "failed"
 
 
-class ResearchSource(str, Enum):
-    PROFILE = "profile"
-    CULTURE = "culture"
-    GLASSDOOR = "glassdoor"
-    LINKEDIN = "linkedin"
-    NEWS = "news"
-    LEADERSHIP = "leadership"
-    COMPETITORS = "competitors"
+class ResearchCategory(str, Enum):
+    STRATEGIC_INITIATIVES = "strategic_initiatives"
+    COMPETITIVE_LANDSCAPE = "competitive_landscape"
+    NEWS_MOMENTUM = "news_momentum"
+    INDUSTRY_CONTEXT = "industry_context"
+    CULTURE_VALUES = "culture_values"
+    LEADERSHIP_DIRECTION = "leadership_direction"
 
 
 class ResearchSourceResult(BaseModel):
-    """Result from researching a single source."""
+    """Result from researching a single strategic category."""
     found: bool
     content: Optional[str] = None
     reason: Optional[str] = None  # If not found, why
@@ -52,12 +51,12 @@ class ResearchErrorEvent(BaseModel):
 
 class ResearchResult(BaseModel):
     """Complete research result stored in application."""
-    profile: Optional[ResearchSourceResult] = None
-    culture: Optional[ResearchSourceResult] = None
-    glassdoor: Optional[ResearchSourceResult] = None
-    linkedin: Optional[ResearchSourceResult] = None
-    news: Optional[ResearchSourceResult] = None
-    leadership: Optional[ResearchSourceResult] = None
-    competitors: Optional[ResearchSourceResult] = None
-    gaps: list[str] = []  # List of sources that weren't found
+    strategic_initiatives: Optional[ResearchSourceResult] = None
+    competitive_landscape: Optional[ResearchSourceResult] = None
+    news_momentum: Optional[ResearchSourceResult] = None
+    industry_context: Optional[ResearchSourceResult] = None
+    culture_values: Optional[ResearchSourceResult] = None
+    leadership_direction: Optional[ResearchSourceResult] = None
+    synthesis: Optional[str] = None  # Strategic narrative answering the core research question
+    gaps: list[str] = []  # List of categories with incomplete context
     completed_at: Optional[str] = None

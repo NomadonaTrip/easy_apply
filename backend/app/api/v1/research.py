@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import StreamingResponse
 
 from app.api.deps import get_current_role
+from app.models.application import ApplicationUpdate, ApplicationStatus
 from app.models.role import Role
 from app.services import application_service
 from app.services.research_service import research_service
@@ -34,6 +35,11 @@ async def start_research(
             status_code=400,
             detail="Application must have company name and job posting",
         )
+
+    # Update application status to researching
+    await application_service.update_application(
+        id, role.id, ApplicationUpdate(status=ApplicationStatus.RESEARCHING)
+    )
 
     background_tasks.add_task(
         research_service.start_research,

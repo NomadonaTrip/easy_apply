@@ -7,7 +7,7 @@ import pytest
 
 from app.models.research import (
     ResearchStatus,
-    ResearchSource,
+    ResearchCategory,
     ResearchSourceResult,
     ResearchResult,
     ResearchProgressEvent,
@@ -32,14 +32,13 @@ class TestResearchModels:
         assert ResearchStatus.COMPLETE == "complete"
         assert ResearchStatus.FAILED == "failed"
 
-    def test_research_source_enum_values(self):
-        assert ResearchSource.PROFILE == "profile"
-        assert ResearchSource.CULTURE == "culture"
-        assert ResearchSource.GLASSDOOR == "glassdoor"
-        assert ResearchSource.LINKEDIN == "linkedin"
-        assert ResearchSource.NEWS == "news"
-        assert ResearchSource.LEADERSHIP == "leadership"
-        assert ResearchSource.COMPETITORS == "competitors"
+    def test_research_category_enum_values(self):
+        assert ResearchCategory.STRATEGIC_INITIATIVES == "strategic_initiatives"
+        assert ResearchCategory.COMPETITIVE_LANDSCAPE == "competitive_landscape"
+        assert ResearchCategory.NEWS_MOMENTUM == "news_momentum"
+        assert ResearchCategory.INDUSTRY_CONTEXT == "industry_context"
+        assert ResearchCategory.CULTURE_VALUES == "culture_values"
+        assert ResearchCategory.LEADERSHIP_DIRECTION == "leadership_direction"
 
     def test_research_source_result_found(self):
         result = ResearchSourceResult(found=True, content="Some content")
@@ -54,21 +53,21 @@ class TestResearchModels:
         assert result.reason == "Source unavailable"
 
     def test_research_progress_event(self):
-        event = ResearchProgressEvent(source="profile", message="Searching...")
+        event = ResearchProgressEvent(source="strategic_initiatives", message="Investigating...")
         assert event.type == "progress"
-        assert event.source == "profile"
+        assert event.source == "strategic_initiatives"
         assert event.status == "searching"
-        assert event.message == "Searching..."
+        assert event.message == "Investigating..."
 
     def test_research_progress_event_custom_status(self):
-        event = ResearchProgressEvent(source="profile", status="analyzing", message="Deep dive...")
+        event = ResearchProgressEvent(source="competitive_landscape", status="analyzing", message="Deep dive...")
         assert event.status == "analyzing"
 
     def test_research_complete_event(self):
         result = ResearchSourceResult(found=True, content="data")
-        event = ResearchCompleteEvent(research_data={"profile": result})
+        event = ResearchCompleteEvent(research_data={"strategic_initiatives": result})
         assert event.type == "complete"
-        assert "profile" in event.research_data
+        assert "strategic_initiatives" in event.research_data
 
     def test_research_error_event(self):
         event = ResearchErrorEvent(message="Something failed")
@@ -77,14 +76,14 @@ class TestResearchModels:
 
     def test_research_result_with_gaps(self):
         result = ResearchResult(
-            profile=ResearchSourceResult(found=True, content="data"),
-            glassdoor=ResearchSourceResult(found=False, reason="No reviews"),
-            gaps=["glassdoor"],
+            strategic_initiatives=ResearchSourceResult(found=True, content="data"),
+            industry_context=ResearchSourceResult(found=False, reason="Limited public information"),
+            gaps=["industry_context"],
             completed_at="2026-02-08T00:00:00Z",
         )
-        assert result.profile.found is True
-        assert result.glassdoor.found is False
-        assert "glassdoor" in result.gaps
+        assert result.strategic_initiatives.found is True
+        assert result.industry_context.found is False
+        assert "industry_context" in result.gaps
         assert result.completed_at is not None
 
     def test_research_result_default_gaps_empty(self):
@@ -256,32 +255,30 @@ class TestResearchService:
         assert service.is_running(1) is False
 
     @pytest.mark.asyncio
-    async def test_cancel_research_when_running(self):
+    async def test_cancel_research_when_running(self, monkeypatch):
         """Test cancel_research stops running research and sends error event."""
         service = ResearchService()
         manager = SSEManager()
 
-        # Monkeypatch the global sse_manager used by research_service
         import app.services.research_service as rs_module
-        original_manager = rs_module.sse_manager
-        rs_module.sse_manager = manager
+        monkeypatch.setattr(rs_module, "sse_manager", manager)
 
-        try:
-            service._research_state[1] = ResearchStatus.RUNNING
-            manager._streams[1] = asyncio.Queue()
-            manager._active[1] = True
+        service._research_state[1] = ResearchStatus.RUNNING
+        queue = asyncio.Queue()
+        manager._streams[1] = queue
+        manager._active[1] = True
 
-            result = await service.cancel_research(1)
+        result = await service.cancel_research(1)
 
-            assert result is True
-            assert service.get_status(1) is None  # State cleaned up
-            assert not manager.is_active(1)
+        assert result is True
+        assert service.get_status(1) is None  # State cleaned up
+        assert not manager.is_active(1)
 
-            # Verify error event was queued
-            # Note: close_stream sets _active to False, stream is gone
-            # The event was put on the queue before close_stream was called
-        finally:
-            rs_module.sse_manager = original_manager
+        # Verify error event content was queued correctly (M3 fix)
+        event = queue.get_nowait()
+        assert event["type"] == "error"
+        assert event["message"] == "Research cancelled"
+        assert event["recoverable"] is False
 
     @pytest.mark.asyncio
     async def test_cancel_research_when_not_running(self):
@@ -290,110 +287,97 @@ class TestResearchService:
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_start_research_sends_progress_and_complete_events(self):
+    async def test_start_research_sends_progress_and_complete_events(self, monkeypatch):
         """Integration test: verify start_research produces correct SSE event sequence."""
         service = ResearchService()
         manager = SSEManager()
 
-        # Monkeypatch globals
         import app.services.research_service as rs_module
-        original_manager = rs_module.sse_manager
+        monkeypatch.setattr(rs_module, "sse_manager", manager)
 
         async def mock_update(*args, **kwargs):
             return None
 
-        import app.services.research_service
-        original_save = service._save_research_results
-        service._save_research_results = mock_update
+        monkeypatch.setattr(service, "_save_research_results", mock_update)
 
-        rs_module.sse_manager = manager
+        events = []
 
+        async def consumer():
+            async for event_str in manager.create_stream(1):
+                events.append(json.loads(event_str.replace("data: ", "").strip()))
+
+        consumer_task = asyncio.create_task(consumer())
+
+        await asyncio.sleep(0.05)  # Let consumer start
+        await service.start_research(1, 1, "TestCorp", "Software engineer role")
+        await asyncio.sleep(0.1)  # Let consumer finish
+
+        # 6 progress events + 1 complete event
+        progress_events = [e for e in events if e["type"] == "progress"]
+        complete_events = [e for e in events if e["type"] == "complete"]
+
+        assert len(progress_events) == 6
+        assert len(complete_events) == 1
+
+        # Verify progress event structure per architecture spec
+        for pe in progress_events:
+            assert "source" in pe
+            assert "status" in pe
+            assert "message" in pe
+            assert pe["status"] == "searching"
+
+        # Verify complete event has research_data with 6 categories
+        assert "research_data" in complete_events[0]
+        assert len(complete_events[0]["research_data"]) == 6
+
+        # Verify state is cleaned up
+        assert service.get_status(1) is None
+
+        consumer_task.cancel()
         try:
-            events = []
-
-            async def consumer():
-                async for event_str in manager.create_stream(1):
-                    events.append(json.loads(event_str.replace("data: ", "").strip()))
-
-            consumer_task = asyncio.create_task(consumer())
-
-            await asyncio.sleep(0.05)  # Let consumer start
-            await service.start_research(1, 1, "TestCorp", "Software engineer role")
-            await asyncio.sleep(0.1)  # Let consumer finish
-
-            # 7 progress events + 1 complete event
-            progress_events = [e for e in events if e["type"] == "progress"]
-            complete_events = [e for e in events if e["type"] == "complete"]
-
-            assert len(progress_events) == 7
-            assert len(complete_events) == 1
-
-            # Verify progress event structure per architecture spec
-            for pe in progress_events:
-                assert "source" in pe
-                assert "status" in pe
-                assert "message" in pe
-                assert pe["status"] == "searching"
-
-            # Verify complete event has research_data with 7 sources
-            assert "research_data" in complete_events[0]
-            assert len(complete_events[0]["research_data"]) == 7
-
-            # Verify state is cleaned up
-            assert service.get_status(1) is None
-
-            consumer_task.cancel()
-            try:
-                await consumer_task
-            except asyncio.CancelledError:
-                pass
-        finally:
-            rs_module.sse_manager = original_manager
-            service._save_research_results = original_save
+            await consumer_task
+        except asyncio.CancelledError:
+            pass
 
     @pytest.mark.asyncio
-    async def test_start_research_handles_source_exception(self):
+    async def test_start_research_handles_source_exception(self, monkeypatch):
         """Test that an exception during research sends an error event."""
         service = ResearchService()
         manager = SSEManager()
 
         import app.services.research_service as rs_module
-        original_manager = rs_module.sse_manager
-        rs_module.sse_manager = manager
+        monkeypatch.setattr(rs_module, "sse_manager", manager)
 
         async def failing_research(source, company, posting):
             raise RuntimeError("LLM provider unavailable")
 
-        service._research_source = failing_research
+        monkeypatch.setattr(service, "_research_category", failing_research)
 
+        events = []
+
+        async def consumer():
+            async for event_str in manager.create_stream(1):
+                events.append(json.loads(event_str.replace("data: ", "").strip()))
+
+        consumer_task = asyncio.create_task(consumer())
+        await asyncio.sleep(0.05)
+
+        await service.start_research(1, 1, "TestCorp", "Engineer role")
+        await asyncio.sleep(0.1)
+
+        error_events = [e for e in events if e["type"] == "error"]
+        assert len(error_events) == 1
+        assert "LLM provider unavailable" in error_events[0]["message"]
+        assert error_events[0]["recoverable"] is False
+
+        # State cleaned up
+        assert service.get_status(1) is None
+
+        consumer_task.cancel()
         try:
-            events = []
-
-            async def consumer():
-                async for event_str in manager.create_stream(1):
-                    events.append(json.loads(event_str.replace("data: ", "").strip()))
-
-            consumer_task = asyncio.create_task(consumer())
-            await asyncio.sleep(0.05)
-
-            await service.start_research(1, 1, "TestCorp", "Engineer role")
-            await asyncio.sleep(0.1)
-
-            error_events = [e for e in events if e["type"] == "error"]
-            assert len(error_events) == 1
-            assert "LLM provider unavailable" in error_events[0]["message"]
-            assert error_events[0]["recoverable"] is False
-
-            # State cleaned up
-            assert service.get_status(1) is None
-
-            consumer_task.cancel()
-            try:
-                await consumer_task
-            except asyncio.CancelledError:
-                pass
-        finally:
-            rs_module.sse_manager = original_manager
+            await consumer_task
+        except asyncio.CancelledError:
+            pass
 
 
 # ============================================================================
@@ -617,3 +601,46 @@ class TestResearchEndpoints:
             headers={"X-Role-Id": str(role_b_id)},
         )
         assert response.status_code == 404  # Application not found for this role
+
+    def test_start_research_sets_status_to_researching(self, client):
+        """Test that starting research updates application status to RESEARCHING (H1 fix)."""
+        _role_id, app_id, headers = _auth_helper(client)
+
+        # Verify initial status is 'created'
+        app_resp = client.get(f"/api/v1/applications/{app_id}", headers=headers)
+        assert app_resp.json()["status"] == "created"
+
+        # Start research
+        response = client.post(
+            f"/api/v1/applications/{app_id}/research",
+            headers=headers,
+        )
+        assert response.status_code == 200
+
+        # Verify status updated to 'researching'
+        app_resp = client.get(f"/api/v1/applications/{app_id}", headers=headers)
+        assert app_resp.json()["status"] == "researching"
+
+    def test_start_research_rejects_missing_job_data(self, client, monkeypatch):
+        """Test 400 when application lacks company_name or job_posting (M2 fix)."""
+        from types import SimpleNamespace
+        _role_id, app_id, headers = _auth_helper(client)
+
+        # Mock application_service to return an application with missing job_posting
+        mock_app = SimpleNamespace(
+            id=app_id, company_name="Corp", job_posting=None, research_data=None,
+        )
+
+        async def mock_get_application(id, role_id):
+            return mock_app
+
+        monkeypatch.setattr(
+            "app.services.application_service.get_application", mock_get_application,
+        )
+
+        response = client.post(
+            f"/api/v1/applications/{app_id}/research",
+            headers=headers,
+        )
+        assert response.status_code == 400
+        assert "company name and job posting" in response.json()["detail"]
