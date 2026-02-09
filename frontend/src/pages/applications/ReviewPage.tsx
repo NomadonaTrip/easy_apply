@@ -7,7 +7,7 @@ import { ResearchSummary } from '@/components/application/ResearchSummary';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowRight, ArrowLeft, FileText } from 'lucide-react';
+import { ArrowRight, ArrowLeft, FileText, MessageSquare, Pencil, Plus } from 'lucide-react';
 import { getApplication } from '@/api/applications';
 import { parseResearchData } from '@/lib/parseResearch';
 
@@ -84,6 +84,7 @@ export function ReviewPage() {
             <ResearchSummary
               research={research}
               gaps={gaps}
+              onAddContext={() => navigate(`/applications/${id}/context`)}
             />
           ) : (
             <div className="text-center py-8 text-muted-foreground">
@@ -91,6 +92,43 @@ export function ReviewPage() {
               <p className="text-sm mt-2">
                 Research may still be in progress or there was an error.
               </p>
+            </div>
+          )}
+
+          {/* Manual Context Display */}
+          {application?.manual_context ? (
+            <Card className="border-success/20 bg-success/5">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <MessageSquare className="h-4 w-4" aria-hidden="true" />
+                    Your Additional Context
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => navigate(`/applications/${id}/context`)}
+                  >
+                    <Pencil className="h-4 w-4 mr-2" aria-hidden="true" />
+                    Edit
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                  {application.manual_context}
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="flex justify-center">
+              <Button
+                variant="outline"
+                onClick={() => navigate(`/applications/${id}/context`)}
+              >
+                <Plus className="h-4 w-4 mr-2" aria-hidden="true" />
+                Add Manual Context
+              </Button>
             </div>
           )}
 

@@ -94,3 +94,37 @@ async def update_application(
         await session.refresh(application)
         session.expunge(application)
         return application
+
+
+async def update_manual_context(
+    id: int,
+    role_id: int,
+    sanitized_context: str,
+) -> Optional[Application]:
+    """Update manual_context with role ownership check.
+
+    This is the ONLY write path for manual_context. The value must be
+    pre-sanitized (html.escape) by the caller in the API layer.
+    """
+    if role_id is None:
+        raise ValueError("role_id is required - data isolation violation")
+
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(Application).where(
+                Application.id == id,
+                Application.role_id == role_id
+            )
+        )
+        application = result.scalar_one_or_none()
+        if not application:
+            return None
+
+        application.manual_context = sanitized_context
+        application.updated_at = datetime.now(timezone.utc)
+
+        session.add(application)
+        await session.commit()
+        await session.refresh(application)
+        session.expunge(application)
+        return application

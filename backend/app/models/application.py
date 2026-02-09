@@ -32,6 +32,7 @@ class Application(SQLModel, table=True):
     status: ApplicationStatus = Field(default=ApplicationStatus.CREATED)
     keywords: Optional[str] = Field(default=None)  # JSON string of keyword list
     research_data: Optional[str] = Field(default=None)  # JSON string
+    manual_context: Optional[str] = Field(default=None, max_length=5000)
     resume_content: Optional[str] = Field(default=None)
     cover_letter_content: Optional[str] = Field(default=None)
     created_at: datetime = Field(
@@ -55,6 +56,8 @@ class Application(SQLModel, table=True):
             raise ValueError("job_posting cannot be empty")
         if self.job_url and len(self.job_url) > 2048:
             raise ValueError("job_url must be 2048 characters or fewer")
+        if self.manual_context and len(self.manual_context) > 5000:
+            raise ValueError("manual_context must be 5000 characters or fewer")
         if self.status and not isinstance(self.status, ApplicationStatus):
             try:
                 self.status = ApplicationStatus(self.status)
@@ -81,6 +84,7 @@ class ApplicationRead(SQLModel):
     status: ApplicationStatus
     keywords: Optional[str]
     research_data: Optional[str]
+    manual_context: Optional[str]
     resume_content: Optional[str]
     cover_letter_content: Optional[str]
     created_at: datetime
@@ -96,5 +100,7 @@ class ApplicationUpdate(SQLModel):
     status: Optional[ApplicationStatus] = None
     keywords: Optional[str] = None
     research_data: Optional[str] = None
+    # manual_context excluded: all writes must go through the dedicated
+    # PATCH /{id}/context endpoint which applies HTML sanitization.
     resume_content: Optional[str] = None
     cover_letter_content: Optional[str] = None

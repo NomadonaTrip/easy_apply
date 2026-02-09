@@ -1,7 +1,10 @@
 """Application API endpoints."""
 
+import json
+from html import escape
+
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.api.deps import get_current_role
 from app.models.role import Role
@@ -152,3 +155,76 @@ async def update_keywords(
         raise HTTPException(status_code=404, detail="Application not found")
 
     return updated_app
+
+
+class ManualContextUpdate(BaseModel):
+    """Request body for manual context update."""
+    manual_context: str = Field(max_length=5000)
+
+
+class ManualContextSaveResponse(BaseModel):
+    """Response schema for saving manual context."""
+    application_id: int
+    manual_context: str
+    message: str
+
+
+class ManualContextGetResponse(BaseModel):
+    """Response schema for retrieving manual context."""
+    application_id: int
+    manual_context: str
+    gaps: list[str]
+
+
+@router.patch("/{id}/context", response_model=ManualContextSaveResponse)
+async def update_manual_context(
+    id: int,
+    body: ManualContextUpdate,
+    role: Role = Depends(get_current_role),
+):
+    """Add or update manual context for an application."""
+    application = await application_service.get_application(id, role.id)
+    if not application:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    # Sanitize input - escape ALL HTML entities and trim whitespace.
+    # html.escape() converts <, >, &, " and ' to HTML entities,
+    # neutralizing any HTML/script injection vectors.
+    sanitized_context = escape(body.manual_context.strip())
+
+    updated = await application_service.update_manual_context(
+        id, role.id, sanitized_context
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    return ManualContextSaveResponse(
+        application_id=updated.id,
+        manual_context=updated.manual_context or "",
+        message="Context saved successfully",
+    )
+
+
+@router.get("/{id}/context", response_model=ManualContextGetResponse)
+async def get_manual_context(
+    id: int,
+    role: Role = Depends(get_current_role),
+):
+    """Get manual context for an application."""
+    application = await application_service.get_application(id, role.id)
+    if not application:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    gaps: list[str] = []
+    if application.research_data:
+        try:
+            research = json.loads(application.research_data)
+            gaps = research.get("gaps", [])
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    return ManualContextGetResponse(
+        application_id=application.id,
+        manual_context=application.manual_context or "",
+        gaps=gaps,
+    )
