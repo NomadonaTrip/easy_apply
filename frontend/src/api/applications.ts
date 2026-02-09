@@ -75,3 +75,9 @@ export async function updateApplicationStatus(id: number, status: ApplicationSta
     body: JSON.stringify({ status }),
   });
 }
+
+export async function startResearch(id: number): Promise<{ status: string }> {
+  return apiRequest<{ status: string }>(`/applications/${id}/research`, {
+    method: 'POST',
+  });
+}

@@ -1,36 +1,221 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
 import { ReviewPage } from './ReviewPage';
+import * as applicationsApi from '@/api/applications';
+import type { Application } from '@/api/applications';
+import { useRoleStore } from '@/stores/roleStore';
+
+vi.mock('@/api/applications', () => ({
+  getApplication: vi.fn(),
+  getApplications: vi.fn(),
+  createApplication: vi.fn(),
+  extractKeywords: vi.fn(),
+  saveKeywords: vi.fn(),
+  updateApplicationStatus: vi.fn(),
+  startResearch: vi.fn(),
+}));
+
+const mockResearchData = JSON.stringify({
+  strategic_initiatives: {
+    found: true,
+    content: 'Expanding into enterprise SaaS market',
+  },
+  competitive_landscape: {
+    found: true,
+    content: '- Main competitor is BigCo\n- Differentiates on price',
+  },
+  industry_context: {
+    found: false,
+    reason: 'Limited public data available',
+  },
+  synthesis: 'Company needs senior engineers to scale platform.',
+  gaps: ['industry_context'],
+  completed_at: '2026-02-09T12:00:00Z',
+});
+
+const mockApplication: Application = {
+  id: 1,
+  role_id: 1,
+  company_name: 'Acme Corp',
+  job_posting: 'Senior Engineer',
+  job_url: 'https://acme.com/jobs/1',
+  status: 'researching',
+  keywords: null,
+  research_data: mockResearchData,
+  resume_content: null,
+  cover_letter_content: null,
+  created_at: '2026-02-01T00:00:00Z',
+  updated_at: '2026-02-09T00:00:00Z',
+};
+
+function createTestQueryClient() {
+  return new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+}
+
+function renderPage(initialEntry = '/applications/1/review') {
+  // Set a current role in the store so apiRequest doesn't throw
+  useRoleStore.setState({
+    currentRole: { id: 1, user_id: 1, name: 'Dev', created_at: '2026-01-01' },
+  });
+
+  const queryClient = createTestQueryClient();
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={[initialEntry]}>
+        <Routes>
+          <Route path="/applications/:id/review" element={<ReviewPage />} />
+          <Route path="/applications/:id/research" element={<div>Research Page</div>} />
+          <Route path="/applications/:id/export" element={<div>Export Page</div>} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
-function renderPage() {
-  return render(
-    <MemoryRouter initialEntries={['/applications/1/review']}>
-      <Routes>
-        <Route path="/applications/:id/review" element={<ReviewPage />} />
-        <Route path="/applications/:id/research" element={<div>Research Page</div>} />
-      </Routes>
-    </MemoryRouter>,
-  );
-}
-
 describe('ReviewPage', () => {
-  it('renders placeholder content', () => {
+  it('shows loading skeleton while fetching', () => {
+    vi.mocked(applicationsApi.getApplication).mockImplementation(
+      () => new Promise(() => {}), // never resolves
+    );
     renderPage();
-    expect(screen.getByText('Review phase coming soon.')).toBeInTheDocument();
+
+    // Skeleton elements should be visible
+    expect(document.querySelector('.animate-pulse')).toBeInTheDocument();
   });
 
-  it('renders back button', () => {
+  it('shows error state when fetch fails', async () => {
+    vi.mocked(applicationsApi.getApplication).mockRejectedValue(new Error('Network error'));
     renderPage();
-    expect(screen.getByRole('button', { name: /back/i })).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to load application data')).toBeInTheDocument();
+    });
   });
 
-  it('renders wizard step indicator at step 4', () => {
+  it('displays research summary when data is loaded', async () => {
+    vi.mocked(applicationsApi.getApplication).mockResolvedValue(mockApplication);
     renderPage();
-    expect(screen.getByText('Review')).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByText(/Research Summary: Acme Corp/)).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('Strategic Initiatives')).toBeInTheDocument();
+    expect(screen.getByText('Industry Context')).toBeInTheDocument();
+  });
+
+  it('shows synthesis text', async () => {
+    vi.mocked(applicationsApi.getApplication).mockResolvedValue(mockApplication);
+    renderPage();
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Company needs senior engineers to scale platform.'),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('shows empty state when no research data', async () => {
+    vi.mocked(applicationsApi.getApplication).mockResolvedValue({
+      ...mockApplication,
+      research_data: null,
+    });
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('No research data available.')).toBeInTheDocument();
+    });
+  });
+
+  it('shows gap indicator for missing sections', async () => {
+    vi.mocked(applicationsApi.getApplication).mockResolvedValue(mockApplication);
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('Limited Info')).toBeInTheDocument();
+    });
+  });
+
+  it('renders continue button', async () => {
+    vi.mocked(applicationsApi.getApplication).mockResolvedValue(mockApplication);
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /continue to generation/i })).toBeInTheDocument();
+    });
+  });
+
+  it('navigates to export on continue click', async () => {
+    const user = userEvent.setup();
+    vi.mocked(applicationsApi.getApplication).mockResolvedValue(mockApplication);
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /continue to generation/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /continue to generation/i }));
+
+    expect(screen.getByText('Export Page')).toBeInTheDocument();
+  });
+
+  it('renders back button that navigates to research', async () => {
+    const user = userEvent.setup();
+    vi.mocked(applicationsApi.getApplication).mockResolvedValue(mockApplication);
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /back/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /back/i }));
+
+    expect(screen.getByText('Research Page')).toBeInTheDocument();
+  });
+
+  it('renders wizard step indicator at step 4', async () => {
+    vi.mocked(applicationsApi.getApplication).mockResolvedValue(mockApplication);
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('Review')).toBeInTheDocument();
+    });
+  });
+
+  it('expands accordion section on click', async () => {
+    const user = userEvent.setup();
+    vi.mocked(applicationsApi.getApplication).mockResolvedValue(mockApplication);
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('Strategic Initiatives')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('Strategic Initiatives'));
+
+    expect(screen.getByText(/Expanding into enterprise SaaS market/)).toBeInTheDocument();
+  });
+
+  it('shows gap reason when gap section is expanded', async () => {
+    const user = userEvent.setup();
+    vi.mocked(applicationsApi.getApplication).mockResolvedValue(mockApplication);
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('Industry Context')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('Industry Context'));
+
+    expect(screen.getByText(/Limited public data available/)).toBeInTheDocument();
   });
 });
