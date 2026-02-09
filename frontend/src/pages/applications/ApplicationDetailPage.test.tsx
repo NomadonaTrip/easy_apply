@@ -81,16 +81,19 @@ describe('ApplicationDetailPage', () => {
     expect(screen.getByText('Research')).toBeInTheDocument();
   });
 
-  it('displays loading state initially', () => {
+  it('displays loading state with skeletons', () => {
     vi.mocked(applicationsApi.getApplication).mockReturnValue(new Promise(() => {}));
     renderPage();
-    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    const skeletons = document.querySelectorAll('[data-slot="skeleton"]');
+    expect(skeletons.length).toBeGreaterThan(0);
   });
 
-  it('displays not found when application is null', async () => {
-    vi.mocked(applicationsApi.getApplication).mockResolvedValue(null as any);
+  it('displays not found with back link when application is null', async () => {
+    vi.mocked(applicationsApi.getApplication).mockResolvedValue(null as unknown as applicationsApi.Application);
     renderPage();
     expect(await screen.findByText('Application not found')).toBeInTheDocument();
+    const backLink = screen.getByRole('link', { name: /back to dashboard/i });
+    expect(backLink).toHaveAttribute('href', '/dashboard');
   });
 
   it('displays job posting content', async () => {
@@ -117,5 +120,44 @@ describe('ApplicationDetailPage', () => {
     renderPage();
     // Page should still render without crashing
     expect(await screen.findByText('Acme Corp')).toBeInTheDocument();
+  });
+
+  describe('navigation links', () => {
+    it('displays a "Back to Dashboard" link pointing to /dashboard', async () => {
+      renderPage();
+      const backLink = await screen.findByRole('link', { name: /back to dashboard/i });
+      expect(backLink).toHaveAttribute('href', '/dashboard');
+    });
+
+    it('displays a "View Keywords" link in the keywords card when keywords exist', async () => {
+      renderPage();
+      const viewKeywordsLink = await screen.findByRole('link', { name: /view keywords/i });
+      expect(viewKeywordsLink).toHaveAttribute('href', '/applications/1/keywords');
+    });
+
+    it('displays a standalone "View Keywords" link when no keywords exist', async () => {
+      vi.mocked(applicationsApi.getApplication).mockResolvedValue({
+        ...mockApplication,
+        keywords: null,
+      });
+      renderPage();
+      const viewKeywordsLink = await screen.findByRole('link', { name: /view keywords/i });
+      expect(viewKeywordsLink).toHaveAttribute('href', '/applications/1/keywords');
+    });
+
+    it('still displays the "Continue Workflow" button', async () => {
+      renderPage();
+      expect(await screen.findByRole('button', { name: /continue workflow/i })).toBeInTheDocument();
+    });
+
+    it('hides "Continue Workflow" button for terminal statuses', async () => {
+      vi.mocked(applicationsApi.getApplication).mockResolvedValue({
+        ...mockApplication,
+        status: 'sent' as applicationsApi.ApplicationStatus,
+      });
+      renderPage();
+      await screen.findByText('Acme Corp');
+      expect(screen.queryByRole('button', { name: /continue workflow/i })).not.toBeInTheDocument();
+    });
   });
 });
