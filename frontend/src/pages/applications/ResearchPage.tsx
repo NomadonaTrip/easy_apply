@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { WizardStepLayout } from '@/components/layout/WizardStepLayout';
-import { useResearchStream } from '@/hooks/useResearchStream';
+import { useResearchStream, RESEARCH_CATEGORIES } from '@/hooks/useResearchStream';
 import { ResearchProgress } from '@/components/application/ResearchProgress';
 import { getApplication } from '@/api/applications';
 import { Button } from '@/components/ui/button';
@@ -63,6 +63,49 @@ export function ResearchPage() {
     );
   }
 
+  // Research already completed — show completed state
+  if (application?.research_data && !isComplete && !hasStartedRef.current) {
+    return (
+      <WizardStepLayout currentStep={3}>
+        <Card className="shadow-md">
+          <CardHeader>
+            <CardTitle>Researching {application.company_name}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <ResearchProgress
+              sources={RESEARCH_CATEGORIES.map((s) => ({
+                source: s.source,
+                status: 'complete' as const,
+                found: true,
+              }))}
+              progress={100}
+              isComplete={true}
+            />
+            <div className="pt-4 border-t">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-success">Research Complete</p>
+                  <p className="text-sm text-muted-foreground">
+                    Review the findings before generating your documents.
+                  </p>
+                </div>
+                <Button onClick={handleContinue}>
+                  Continue to Review
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <div className="mt-8 flex justify-start">
+          <Button variant="ghost" onClick={() => navigate(`/applications/${id}/keywords`)}>
+            Back
+          </Button>
+        </div>
+      </WizardStepLayout>
+    );
+  }
+
   return (
     <WizardStepLayout currentStep={3}>
       <Card className="shadow-md">
@@ -89,7 +132,7 @@ export function ResearchPage() {
             <div className="pt-4 border-t">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="font-medium text-green-600 dark:text-green-400">Research Complete</p>
+                  <p className="font-medium text-success">Research Complete</p>
                   <p className="text-sm text-muted-foreground">
                     Review the findings before generating your documents.
                   </p>

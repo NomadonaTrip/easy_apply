@@ -8,7 +8,7 @@ from typing import Optional
 
 from app.llm.circuit_breaker import CircuitBreaker, CircuitOpenError
 from app.llm.rate_pacer import RatePacer
-from app.models.application import ApplicationUpdate
+from app.models.application import ApplicationUpdate, ApplicationStatus
 from app.models.research import ResearchStatus, ResearchCategory, ResearchResult, ResearchSourceResult
 from app.services.sse_manager import sse_manager
 from app.services import application_service
@@ -195,6 +195,11 @@ class ResearchService:
             try:
                 await self._save_research_results(
                     application_id, role_id, research_result
+                )
+                # Advance status so frontend knows research is done
+                await application_service.update_application(
+                    application_id, role_id,
+                    ApplicationUpdate(status=ApplicationStatus.REVIEWED),
                 )
             except Exception as db_err:
                 logger.error(
