@@ -52,7 +52,7 @@ class PromptRegistry:
 from .extraction import SKILL_EXTRACTION_PROMPT, ACCOMPLISHMENT_EXTRACTION_PROMPT  # noqa: E402, F401
 from .keyword import KEYWORD_EXTRACTION_PROMPT  # noqa: E402, F401
 from .scrape import JOB_DESCRIPTION_EXTRACTION_PROMPT  # noqa: E402, F401
-# from . import research  # noqa: E402, F401  # TODO: Uncomment when Epic 4 adds research prompts
+from . import research  # noqa: E402, F401
 
 __all__ = [
     "PromptRegistry",
