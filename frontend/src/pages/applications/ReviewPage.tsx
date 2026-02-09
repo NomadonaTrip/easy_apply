@@ -1,5 +1,7 @@
+import { useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { WizardStepLayout } from '@/components/layout/WizardStepLayout';
 import { ResearchSummary } from '@/components/application/ResearchSummary';
 import { Button } from '@/components/ui/button';
@@ -22,6 +24,18 @@ export function ReviewPage() {
 
   const research = application ? parseResearchData(application.research_data) : null;
   const gaps = research?.gaps ?? [];
+  const gapToastShown = useRef(false);
+
+  useEffect(() => {
+    if (gaps.length > 0 && !gapToastShown.current) {
+      gapToastShown.current = true;
+      toast.warning('Some research categories had limited results', {
+        description:
+          'Your application will still be generated using available data. Review the gaps below for details.',
+        duration: 8000,
+      });
+    }
+  }, [gaps]);
 
   if (isLoading) {
     return (
@@ -67,7 +81,10 @@ export function ReviewPage() {
 
         <CardContent className="space-y-6">
           {research ? (
-            <ResearchSummary research={research} gaps={gaps} />
+            <ResearchSummary
+              research={research}
+              gaps={gaps}
+            />
           ) : (
             <div className="text-center py-8 text-muted-foreground">
               <p>No research data available.</p>

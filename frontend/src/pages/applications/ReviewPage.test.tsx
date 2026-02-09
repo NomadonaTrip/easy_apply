@@ -216,6 +216,7 @@ describe('ReviewPage', () => {
 
     await user.click(screen.getByText('Industry Context'));
 
-    expect(screen.getByText(/Limited public data available/)).toBeInTheDocument();
+    // Text appears in both GapsSummary and the expanded section
+    expect(screen.getAllByText(/Limited public data available/).length).toBeGreaterThanOrEqual(1);
   });
 });

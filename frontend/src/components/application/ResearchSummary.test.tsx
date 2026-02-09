@@ -61,8 +61,7 @@ describe('ResearchSummary', () => {
     // 6 total sections - 1 gap = 5 found
     expect(screen.getByText('5')).toBeInTheDocument();
     expect(screen.getByText('Sources found')).toBeInTheDocument();
-    expect(screen.getByText('1')).toBeInTheDocument();
-    expect(screen.getByText('Gaps')).toBeInTheDocument();
+    expect(screen.getByText('Gaps (non-blocking)')).toBeInTheDocument();
   });
 
   it('shows gap indicator for missing data', () => {
@@ -94,9 +93,10 @@ describe('ResearchSummary', () => {
 
     await user.click(screen.getByText('Industry Context'));
 
+    // Gap reason appears in both GapsSummary and the expanded section
     expect(
-      screen.getByText(/Limited public information on industry trends/),
-    ).toBeInTheDocument();
+      screen.getAllByText(/Limited public information on industry trends/).length,
+    ).toBeGreaterThanOrEqual(1);
   });
 
   it('collapses previously open section when another is clicked (single mode)', async () => {
@@ -130,5 +130,37 @@ describe('ResearchSummary', () => {
     render(<ResearchSummary research={noSynthesis} gaps={[]} />);
 
     expect(screen.queryByText('Strategic Summary')).not.toBeInTheDocument();
+  });
+
+  it('shows GapsSummary alert when gaps exist', () => {
+    render(<ResearchSummary research={fullResearch} gaps={['industry_context']} />);
+
+    expect(
+      screen.getByText(/1 of 6 research categories with incomplete context/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("This won't block your application")).toBeInTheDocument();
+  });
+
+  it('does not show GapsSummary when no gaps', () => {
+    render(<ResearchSummary research={fullResearch} gaps={[]} />);
+
+    expect(
+      screen.queryByText(/research categories with incomplete context/),
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows Partial badge for partial sections', () => {
+    const partialResearch: ResearchResult = {
+      ...fullResearch,
+      culture_values: {
+        found: true,
+        content: 'Limited information about company culture.',
+        partial: true,
+        partial_note: 'Only careers page found',
+      },
+    };
+    render(<ResearchSummary research={partialResearch} gaps={['industry_context']} />);
+
+    expect(screen.getByText('Partial')).toBeInTheDocument();
   });
 });

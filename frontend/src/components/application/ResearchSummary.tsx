@@ -5,6 +5,7 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion';
 import { ResearchSection } from './ResearchSection';
+import { GapsSummary } from './GapsSummary';
 import { Rocket, Target, Newspaper, TrendingUp, Heart, Compass } from 'lucide-react';
 import type { ResearchResult, ResearchSourceResult } from '@/lib/parseResearch';
 
@@ -50,13 +51,24 @@ const SECTION_CONFIG = [
 interface ResearchSummaryProps {
   research: ResearchResult;
   gaps: string[];
+  onAddContext?: () => void;
 }
 
-export function ResearchSummary({ research, gaps }: ResearchSummaryProps) {
+export function ResearchSummary({ research, gaps, onAddContext }: ResearchSummaryProps) {
   const foundCount = SECTION_CONFIG.length - gaps.length;
 
   return (
     <div className="space-y-6">
+      {/* Gaps Alert - Show prominently when gaps exist */}
+      {gaps.length > 0 && (
+        <GapsSummary
+          gaps={gaps}
+          research={research}
+          totalSources={SECTION_CONFIG.length}
+          onAddContext={onAddContext}
+        />
+      )}
+
       {/* Synthesis */}
       {research.synthesis && (
         <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
@@ -74,7 +86,7 @@ export function ResearchSummary({ research, gaps }: ResearchSummaryProps) {
         {gaps.length > 0 && (
           <div>
             <p className="text-2xl font-bold text-warning">{gaps.length}</p>
-            <p className="text-sm text-muted-foreground">Gaps</p>
+            <p className="text-sm text-muted-foreground">Gaps (non-blocking)</p>
           </div>
         )}
       </div>
@@ -84,6 +96,7 @@ export function ResearchSummary({ research, gaps }: ResearchSummaryProps) {
         {SECTION_CONFIG.map((config) => {
           const data = research[config.key] as ResearchSourceResult | undefined;
           const isGap = gaps.includes(config.key);
+          const isPartial = data?.partial === true;
           const Icon = config.icon;
 
           return (
@@ -91,10 +104,10 @@ export function ResearchSummary({ research, gaps }: ResearchSummaryProps) {
               <AccordionTrigger className="hover:no-underline">
                 <div className="flex items-center gap-3">
                   <div
-                    className={`p-2 rounded-lg ${isGap ? 'bg-warning/10' : 'bg-primary/10'}`}
+                    className={`p-2 rounded-lg ${isGap || isPartial ? 'bg-warning/10' : 'bg-primary/10'}`}
                   >
                     <Icon
-                      className={`h-5 w-5 ${isGap ? 'text-warning' : 'text-primary'}`}
+                      className={`h-5 w-5 ${isGap || isPartial ? 'text-warning' : 'text-primary'}`}
                       aria-hidden="true"
                     />
                   </div>
@@ -104,6 +117,11 @@ export function ResearchSummary({ research, gaps }: ResearchSummaryProps) {
                       {isGap && (
                         <span className="text-xs bg-warning/10 text-warning-foreground px-2 py-0.5 rounded">
                           Limited Info
+                        </span>
+                      )}
+                      {isPartial && !isGap && (
+                        <span className="text-xs bg-warning/10 text-warning-foreground px-2 py-0.5 rounded">
+                          Partial
                         </span>
                       )}
                     </p>
@@ -116,6 +134,8 @@ export function ResearchSummary({ research, gaps }: ResearchSummaryProps) {
                   content={data?.content ?? null}
                   reason={data?.reason ?? null}
                   isGap={isGap}
+                  partial={data?.partial}
+                  partialNote={data?.partial_note}
                 />
               </AccordionContent>
             </AccordionItem>

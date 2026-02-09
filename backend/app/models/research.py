@@ -27,6 +27,8 @@ class ResearchSourceResult(BaseModel):
     found: bool
     content: Optional[str] = None
     reason: Optional[str] = None  # If not found, why
+    partial: bool = False  # True if content was found but is incomplete
+    partial_note: Optional[str] = None  # Explanation of what's missing
 
 
 class ResearchProgressEvent(BaseModel):

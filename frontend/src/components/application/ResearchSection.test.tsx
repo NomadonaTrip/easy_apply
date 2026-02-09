@@ -69,4 +69,54 @@ describe('ResearchSection', () => {
     const listItems = insightsContainer.querySelectorAll('li');
     expect(listItems.length).toBe(5);
   });
+
+  it('shows partial warning when partial is true', () => {
+    render(
+      <ResearchSection
+        content="Limited information about company culture from careers page."
+        reason={null}
+        isGap={false}
+        partial={true}
+        partialNote="Only careers page found, no additional public statements"
+      />,
+    );
+
+    expect(screen.getByText('Partial Information')).toBeInTheDocument();
+    expect(
+      screen.getByText('Only careers page found, no additional public statements'),
+    ).toBeInTheDocument();
+    // Content should still be displayed
+    expect(
+      screen.getByText(/Limited information about company culture/),
+    ).toBeInTheDocument();
+  });
+
+  it('shows default partial message when no partialNote provided', () => {
+    render(
+      <ResearchSection
+        content="Some data here"
+        reason={null}
+        isGap={false}
+        partial={true}
+      />,
+    );
+
+    expect(screen.getByText('Partial Information')).toBeInTheDocument();
+    expect(
+      screen.getByText('Some information may be incomplete.'),
+    ).toBeInTheDocument();
+  });
+
+  it('does not show partial warning when partial is false', () => {
+    render(
+      <ResearchSection
+        content="Full detailed research content"
+        reason={null}
+        isGap={false}
+        partial={false}
+      />,
+    );
+
+    expect(screen.queryByText('Partial Information')).not.toBeInTheDocument();
+  });
 });
