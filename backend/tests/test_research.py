@@ -1581,7 +1581,7 @@ class TestResearchEndpoints:
         assert response.status_code == 404
 
     def test_start_research_sets_status_to_researching(self, client):
-        """Test that starting research updates application status to RESEARCHING."""
+        """Test that starting research updates application status to RESEARCHING (or REVIEWED if background task completes first)."""
         _role_id, app_id, headers = _auth_helper(client)
 
         app_resp = client.get(f"/api/v1/applications/{app_id}", headers=headers)
@@ -1594,7 +1594,8 @@ class TestResearchEndpoints:
         assert response.status_code == 200
 
         app_resp = client.get(f"/api/v1/applications/{app_id}", headers=headers)
-        assert app_resp.json()["status"] == "researching"
+        # Background task may complete before we check, advancing to "reviewed"
+        assert app_resp.json()["status"] in ("researching", "reviewed")
 
     def test_start_research_rejects_missing_job_data(self, client, monkeypatch):
         """Test 400 when application lacks company_name or job_posting."""
