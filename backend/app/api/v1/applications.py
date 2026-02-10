@@ -29,7 +29,8 @@ VALID_TRANSITIONS: dict[ApplicationStatus, list[ApplicationStatus]] = {
     ApplicationStatus.CREATED: [ApplicationStatus.KEYWORDS],
     ApplicationStatus.KEYWORDS: [ApplicationStatus.RESEARCHING],
     ApplicationStatus.RESEARCHING: [ApplicationStatus.REVIEWED],
-    ApplicationStatus.REVIEWED: [ApplicationStatus.EXPORTED],
+    ApplicationStatus.REVIEWED: [ApplicationStatus.GENERATING],
+    ApplicationStatus.GENERATING: [ApplicationStatus.EXPORTED],
     ApplicationStatus.EXPORTED: [ApplicationStatus.SENT],
     ApplicationStatus.SENT: [
         ApplicationStatus.CALLBACK,

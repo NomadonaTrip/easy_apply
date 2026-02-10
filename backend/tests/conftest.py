@@ -1,6 +1,7 @@
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
 from app.config import settings, DATA_DIR
@@ -55,3 +56,14 @@ async def clean_database():
 def client():
     from app.main import app
     return TestClient(app)
+
+
+@pytest_asyncio.fixture
+async def async_client():
+    """Async test client for FastAPI."""
+    from app.main import app
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as ac:
+        yield ac

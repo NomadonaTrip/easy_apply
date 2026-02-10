@@ -12,11 +12,20 @@ class ApplicationStatus(str, Enum):
     KEYWORDS = "keywords"
     RESEARCHING = "researching"
     REVIEWED = "reviewed"
+    GENERATING = "generating"
     EXPORTED = "exported"
     SENT = "sent"
     CALLBACK = "callback"
     OFFER = "offer"
     CLOSED = "closed"
+
+
+class GenerationStatus(str, Enum):
+    IDLE = "idle"
+    GENERATING_RESUME = "generating_resume"
+    GENERATING_COVER_LETTER = "generating_cover_letter"
+    COMPLETE = "complete"
+    FAILED = "failed"
 
 
 class Application(SQLModel, table=True):
@@ -33,8 +42,10 @@ class Application(SQLModel, table=True):
     keywords: Optional[str] = Field(default=None)  # JSON string of keyword list
     research_data: Optional[str] = Field(default=None)  # JSON string
     manual_context: Optional[str] = Field(default=None, max_length=5000)
+    generation_status: GenerationStatus = Field(default=GenerationStatus.IDLE)
     resume_content: Optional[str] = Field(default=None)
     cover_letter_content: Optional[str] = Field(default=None)
+    cover_letter_tone: Optional[str] = Field(default=None, max_length=50)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
@@ -63,6 +74,11 @@ class Application(SQLModel, table=True):
                 self.status = ApplicationStatus(self.status)
             except ValueError:
                 raise ValueError(f"Invalid status: {self.status}")
+        if self.generation_status and not isinstance(self.generation_status, GenerationStatus):
+            try:
+                self.generation_status = GenerationStatus(self.generation_status)
+            except ValueError:
+                raise ValueError(f"Invalid generation_status: {self.generation_status}")
 
 
 class ApplicationCreate(SQLModel):
@@ -85,8 +101,10 @@ class ApplicationRead(SQLModel):
     keywords: Optional[str]
     research_data: Optional[str]
     manual_context: Optional[str]
+    generation_status: GenerationStatus
     resume_content: Optional[str]
     cover_letter_content: Optional[str]
+    cover_letter_tone: Optional[str]
     created_at: datetime
     updated_at: datetime
 
@@ -102,5 +120,7 @@ class ApplicationUpdate(SQLModel):
     research_data: Optional[str] = None
     # manual_context excluded: all writes must go through the dedicated
     # PATCH /{id}/context endpoint which applies HTML sanitization.
+    generation_status: Optional[GenerationStatus] = None
     resume_content: Optional[str] = None
     cover_letter_content: Optional[str] = None
+    cover_letter_tone: Optional[str] = Field(default=None, max_length=50)

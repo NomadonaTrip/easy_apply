@@ -273,7 +273,11 @@ class TestApproveResearch:
             f"/api/v1/applications/{app_id}/research/approve"
         )
 
-        # Transition to exported
+        # Transition through generating to exported
+        await client.patch(
+            f"/api/v1/applications/{app_id}/status",
+            json={"status": "generating"}
+        )
         await client.patch(
             f"/api/v1/applications/{app_id}/status",
             json={"status": "exported"}

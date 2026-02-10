@@ -71,7 +71,7 @@ class TestApplicationModel:
         """Test ApplicationStatus enum has all workflow states."""
         expected = [
             "created", "keywords", "researching", "reviewed",
-            "exported", "sent", "callback", "offer", "closed"
+            "generating", "exported", "sent", "callback", "offer", "closed"
         ]
         actual = [s.value for s in ApplicationStatus]
         assert actual == expected

@@ -2,7 +2,7 @@ import { apiRequest } from './client';
 
 export type ApplicationStatus =
   | 'created' | 'keywords' | 'researching' | 'reviewed'
-  | 'exported' | 'sent' | 'callback' | 'offer' | 'closed';
+  | 'generating' | 'exported' | 'sent' | 'callback' | 'offer' | 'closed';
 
 export interface Application {
   id: number;
@@ -14,6 +14,7 @@ export interface Application {
   keywords: string | null;
   research_data: string | null;
   manual_context: string | null;
+  generation_status: string;
   resume_content: string | null;
   cover_letter_content: string | null;
   created_at: string;
