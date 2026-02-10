@@ -1,4 +1,5 @@
 import { apiRequest } from './client';
+import type { CoverLetterTone } from './applications';
 
 export interface GenerateResumeResponse {
   message: string;
@@ -27,7 +28,7 @@ export async function generateResume(applicationId: number): Promise<GenerateRes
 
 export async function generateCoverLetter(
   applicationId: number,
-  tone: string = 'formal',
+  tone: CoverLetterTone = 'formal',
 ): Promise<GenerateCoverLetterResponse> {
   return apiRequest<GenerateCoverLetterResponse>(
     `/applications/${applicationId}/generate/cover-letter`,

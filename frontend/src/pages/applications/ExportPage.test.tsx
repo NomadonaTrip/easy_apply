@@ -50,6 +50,7 @@ const mockReviewedApp: Application = {
   generation_status: 'idle',
   resume_content: null,
   cover_letter_content: null,
+  cover_letter_tone: null,
   created_at: '2026-02-01T00:00:00Z',
   updated_at: '2026-02-09T00:00:00Z',
 };
@@ -369,6 +370,93 @@ describe('ExportPage', () => {
 
       await waitFor(() => {
         expect(screen.getByRole('button', { name: 'Try Again' })).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('cover letter tab', () => {
+    it('shows Resume and Cover Letter tabs', async () => {
+      vi.mocked(applicationsApi.getApplication).mockResolvedValue(mockReviewedApp);
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: /resume/i })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: /cover letter/i })).toBeInTheDocument();
+      });
+    });
+
+    it('shows resume tab active by default', async () => {
+      vi.mocked(applicationsApi.getApplication).mockResolvedValue(mockReviewedApp);
+      renderPage();
+
+      await waitFor(() => {
+        const resumeTab = screen.getByRole('tab', { name: /resume/i });
+        expect(resumeTab).toHaveAttribute('data-state', 'active');
+      });
+    });
+
+    it('shows cover letter content when cover letter tab clicked', async () => {
+      const user = userEvent.setup();
+      vi.mocked(applicationsApi.getApplication).mockResolvedValue(mockReviewedApp);
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: /cover letter/i })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('tab', { name: /cover letter/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Cover Letter Tone')).toBeInTheDocument();
+      });
+    });
+
+    it('shows cover letter preview when cover letter exists', async () => {
+      const user = userEvent.setup();
+      vi.mocked(applicationsApi.getApplication).mockResolvedValue({
+        ...mockReviewedApp,
+        cover_letter_content: 'Dear Hiring Manager,\n\nI am interested in this role.',
+        cover_letter_tone: 'formal',
+        generation_status: 'complete',
+      });
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: /cover letter/i })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('tab', { name: /cover letter/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Cover Letter Preview')).toBeInTheDocument();
+        expect(screen.getByText(/Dear Hiring Manager/)).toBeInTheDocument();
+      });
+    });
+
+    it('generates cover letter with selected tone', async () => {
+      const user = userEvent.setup();
+      vi.mocked(applicationsApi.getApplication).mockResolvedValue(mockReviewedApp);
+      vi.mocked(generationApi.generateCoverLetter).mockResolvedValue({
+        message: 'Cover letter generated',
+        cover_letter_content: 'Dear Hiring Manager,\n\nTest.',
+        status: 'complete',
+      });
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: /cover letter/i })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('tab', { name: /cover letter/i }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /generate cover letter/i })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('button', { name: /generate cover letter/i }));
+
+      await waitFor(() => {
+        expect(generationApi.generateCoverLetter).toHaveBeenCalledWith(1, 'formal');
       });
     });
   });

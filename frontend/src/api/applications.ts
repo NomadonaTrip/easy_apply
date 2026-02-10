@@ -4,6 +4,8 @@ export type ApplicationStatus =
   | 'created' | 'keywords' | 'researching' | 'reviewed'
   | 'generating' | 'exported' | 'sent' | 'callback' | 'offer' | 'closed';
 
+export type CoverLetterTone = 'formal' | 'conversational' | 'match_culture';
+
 export interface Application {
   id: number;
   role_id: number;
@@ -17,6 +19,7 @@ export interface Application {
   generation_status: string;
   resume_content: string | null;
   cover_letter_content: string | null;
+  cover_letter_tone: CoverLetterTone | null;
   created_at: string;
   updated_at: string;
 }

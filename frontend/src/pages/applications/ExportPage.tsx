@@ -3,10 +3,12 @@ import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { WizardStepLayout } from '@/components/layout/WizardStepLayout';
 import { ResumePreview } from '@/components/application/ResumePreview';
+import { CoverLetterPreview } from '@/components/application/CoverLetterPreview';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, AlertCircle, FileText } from 'lucide-react';
 import { getApplication } from '@/api/applications';
 import { useGenerateResume } from '@/hooks/useGeneration';
@@ -90,7 +92,7 @@ export function ExportPage() {
                 Generate Documents: {application.company_name}
               </CardTitle>
               <CardDescription>
-                Generate a tailored resume for this application
+                Generate a tailored resume and cover letter for this application
               </CardDescription>
             </div>
           </div>
@@ -111,14 +113,32 @@ export function ExportPage() {
           )}
 
           {!prerequisitesMissing && (
-            <ResumePreview
-              resumeContent={application.resume_content}
-              generationStatus={application.generation_status}
-              onGenerate={handleGenerateResume}
-              isGenerating={generateResumeMutation.isPending}
-              error={generateResumeMutation.error}
-              generatedAt={application.resume_content ? application.updated_at : null}
-            />
+            <Tabs defaultValue="resume">
+              <TabsList>
+                <TabsTrigger value="resume">Resume</TabsTrigger>
+                <TabsTrigger value="cover-letter">Cover Letter</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="resume" className="mt-4">
+                <ResumePreview
+                  resumeContent={application.resume_content}
+                  generationStatus={application.generation_status}
+                  onGenerate={handleGenerateResume}
+                  isGenerating={generateResumeMutation.isPending}
+                  error={generateResumeMutation.error}
+                  generatedAt={application.resume_content ? application.updated_at : null}
+                />
+              </TabsContent>
+
+              <TabsContent value="cover-letter" className="mt-4">
+                <CoverLetterPreview
+                  applicationId={application.id}
+                  coverLetterContent={application.cover_letter_content}
+                  currentTone={application.cover_letter_tone}
+                  generationStatus={application.generation_status}
+                />
+              </TabsContent>
+            </Tabs>
           )}
         </CardContent>
       </Card>
