@@ -17,47 +17,52 @@ const statusConfig: Record<ApplicationStatus, {
 }> = {
   created: {
     label: 'Created',
-    color: 'bg-gray-100 text-gray-800',
+    color: 'bg-status-created text-status-created-foreground',
     description: 'Application created, awaiting keyword extraction',
   },
   keywords: {
     label: 'Keywords',
-    color: 'bg-blue-100 text-blue-800',
+    color: 'bg-status-keywords text-status-keywords-foreground',
     description: 'Keywords extracted, ready for research',
   },
   researching: {
     label: 'Researching',
-    color: 'bg-yellow-100 text-yellow-800',
+    color: 'bg-status-researching text-status-researching-foreground',
     description: 'Company research in progress',
   },
   reviewed: {
     label: 'Reviewed',
-    color: 'bg-cyan-100 text-cyan-800',
+    color: 'bg-status-reviewed text-status-reviewed-foreground',
     description: 'Research complete, ready for document generation',
+  },
+  generating: {
+    label: 'Generating',
+    color: 'bg-status-generating text-status-generating-foreground',
+    description: 'Documents being generated',
   },
   exported: {
     label: 'Exported',
-    color: 'bg-green-100 text-green-800',
+    color: 'bg-status-exported text-status-exported-foreground',
     description: 'Documents generated and exported',
   },
   sent: {
     label: 'Sent',
-    color: 'bg-teal-100 text-teal-800',
+    color: 'bg-status-sent text-status-sent-foreground',
     description: 'Application submitted to company',
   },
   callback: {
     label: 'Callback',
-    color: 'bg-emerald-100 text-emerald-800',
+    color: 'bg-status-callback text-status-callback-foreground',
     description: 'Got interview or callback',
   },
   offer: {
     label: 'Offer',
-    color: 'bg-amber-100 text-amber-800',
+    color: 'bg-status-offer text-status-offer-foreground',
     description: 'Received job offer',
   },
   closed: {
     label: 'Closed',
-    color: 'bg-red-100 text-red-800',
+    color: 'bg-status-closed text-status-closed-foreground',
     description: 'Application closed',
   },
 };

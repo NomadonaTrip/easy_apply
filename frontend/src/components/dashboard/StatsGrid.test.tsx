@@ -12,6 +12,8 @@ const baseApp: Application = {
   status: 'created',
   keywords: null,
   research_data: null,
+  manual_context: null,
+  generation_status: 'idle',
   resume_content: null,
   cover_letter_content: null,
   created_at: '2026-01-01T00:00:00Z',

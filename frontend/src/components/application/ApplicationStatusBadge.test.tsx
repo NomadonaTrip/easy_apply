@@ -34,19 +34,19 @@ describe('ApplicationStatusBadge', () => {
 
   it('applies correct color classes for statuses', () => {
     const { unmount: u1 } = renderBadge('researching', false);
-    expect(screen.getByText('Researching')).toHaveClass('bg-yellow-100');
+    expect(screen.getByText('Researching')).toHaveClass('bg-status-researching');
     u1();
 
     const { unmount: u2 } = renderBadge('created', false);
-    expect(screen.getByText('Created')).toHaveClass('bg-gray-100');
+    expect(screen.getByText('Created')).toHaveClass('bg-status-created');
     u2();
 
     const { unmount: u3 } = renderBadge('keywords', false);
-    expect(screen.getByText('Keywords')).toHaveClass('bg-blue-100');
+    expect(screen.getByText('Keywords')).toHaveClass('bg-status-keywords');
     u3();
 
     const { unmount: u4 } = renderBadge('exported', false);
-    expect(screen.getByText('Exported')).toHaveClass('bg-green-100');
+    expect(screen.getByText('Exported')).toHaveClass('bg-status-exported');
     u4();
   });
 

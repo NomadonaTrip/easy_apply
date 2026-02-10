@@ -31,9 +31,13 @@ export function ApplicationProgress({
 }: ApplicationProgressProps) {
   const currentIndex = workflowSteps.indexOf(currentStatus);
 
-  // Handle outcome statuses
+  // Handle outcome and intermediate statuses
   const isFinalOutcome = ['callback', 'offer', 'closed'].includes(currentStatus);
-  const effectiveIndex = isFinalOutcome ? workflowSteps.length : currentIndex;
+  // 'generating' maps to the 'exported' step position (index 4)
+  const resolvedIndex = currentStatus === 'generating'
+    ? workflowSteps.indexOf('exported')
+    : currentIndex;
+  const effectiveIndex = isFinalOutcome ? workflowSteps.length : resolvedIndex;
 
   return (
     <nav aria-label="Application progress" className="flex items-center justify-between overflow-x-auto">
