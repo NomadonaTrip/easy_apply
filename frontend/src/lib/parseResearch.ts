@@ -23,6 +23,15 @@ const ResearchResultSchema = z.object({
 export type ResearchSourceResult = z.infer<typeof ResearchSourceResultSchema>;
 export type ResearchResult = z.infer<typeof ResearchResultSchema>;
 
+export const RESEARCH_CATEGORY_KEYS = [
+  'strategic_initiatives',
+  'competitive_landscape',
+  'news_momentum',
+  'industry_context',
+  'culture_values',
+  'leadership_direction',
+] as const;
+
 export function parseResearchData(jsonString: string | null): ResearchResult | null {
   if (!jsonString) return null;
   try {

@@ -51,6 +51,23 @@ _RESEARCH_CONCURRENCY = 3
 # Not-found detection: response must be SHORT and dominated by not-found language.
 # Long responses containing these phrases incidentally are clearly real content (H4 fix).
 _NOT_FOUND_MAX_LENGTH = 500
+
+# Human-readable labels for research categories (used in partial notes and gap reasons)
+CATEGORY_LABELS = {
+    ResearchCategory.STRATEGIC_INITIATIVES: "Strategic Initiatives",
+    ResearchCategory.COMPETITIVE_LANDSCAPE: "Competitive Landscape",
+    ResearchCategory.NEWS_MOMENTUM: "Recent News & Momentum",
+    ResearchCategory.INDUSTRY_CONTEXT: "Industry Context",
+    ResearchCategory.CULTURE_VALUES: "Culture & Values",
+    ResearchCategory.LEADERSHIP_DIRECTION: "Leadership Direction",
+}
+
+# Standardized gap reason constants for predictable frontend consumption
+GAP_REASON_TIMEOUT = "Research timed out"
+GAP_REASON_CIRCUIT_OPEN = "Too many recent failures — research paused"
+GAP_REASON_NO_RESULTS = "No results returned from research"
+GAP_REASON_ERROR_PREFIX = "Research error"
+GAP_REASON_TASK_FAILED = "Category research failed unexpectedly"
 NOT_FOUND_INDICATORS = [
     "no information found",
     "could not find",
@@ -60,6 +77,22 @@ NOT_FOUND_INDICATORS = [
     "no results",
     "unable to find",
     "no relevant information",
+]
+
+# Partial detection: higher threshold than not-found (2000 chars) since partial
+# content is expected to be longer, but guards against very long content that
+# incidentally contains partial phrases (Code Review fix M1).
+_PARTIAL_MAX_LENGTH = 2000
+
+PARTIAL_INDICATORS = [
+    "limited information available",
+    "only limited information",
+    "information is incomplete",
+    "incomplete data",
+    "partial results",
+    "could only find limited",
+    "limited public information",
+    "only found limited",
 ]
 
 
@@ -73,6 +106,22 @@ def _is_not_found(content: str) -> bool:
         return False
     content_lower = content.lower()
     return any(indicator in content_lower for indicator in NOT_FOUND_INDICATORS)
+
+
+def _is_partial(content: str) -> bool:
+    """Determine if LLM response indicates partial/incomplete information.
+
+    Uses a length guard (_PARTIAL_MAX_LENGTH) to avoid false positives on very
+    long content that incidentally contains partial phrases. The threshold is
+    higher than not-found detection because partial responses can be more
+    detailed while still explicitly flagging incompleteness.
+    """
+    if not content:
+        return False
+    if len(content) > _PARTIAL_MAX_LENGTH:
+        return False
+    content_lower = content.lower()
+    return any(indicator in content_lower for indicator in PARTIAL_INDICATORS)
 
 
 class ResearchService:
@@ -160,7 +209,7 @@ class ResearchService:
             for cat in ResearchCategory:
                 if cat.value not in results:
                     results[cat.value] = ResearchSourceResult(
-                        found=False, reason="Category task failed unexpectedly"
+                        found=False, reason=GAP_REASON_TASK_FAILED
                     )
                     gaps.append(cat.value)
 
@@ -264,7 +313,7 @@ class ResearchService:
             )
             result = ResearchSourceResult(
                 found=False,
-                reason=f"Research timed out after {self._category_timeout}s",
+                reason=f"{GAP_REASON_TIMEOUT} after {self._category_timeout}s",
             )
         except Exception as e:
             logger.error(
@@ -273,7 +322,7 @@ class ResearchService:
             )
             result = ResearchSourceResult(
                 found=False,
-                reason=f"Research error: {str(e)}",
+                reason=f"{GAP_REASON_ERROR_PREFIX}: {str(e)}",
             )
 
         # Send category completion
@@ -309,7 +358,7 @@ class ResearchService:
         if not circuit_breaker.can_proceed():
             return ResearchSourceResult(
                 found=False,
-                reason="LLM provider circuit breaker is open - too many recent failures",
+                reason=GAP_REASON_CIRCUIT_OPEN,
             )
 
         # Rate pacing
@@ -367,29 +416,43 @@ class ResearchService:
             if not result_content:
                 return ResearchSourceResult(
                     found=False,
-                    reason="No results returned from research",
+                    reason=GAP_REASON_NO_RESULTS,
                 )
 
             # Robust not-found detection (H4 fix)
             is_found = not _is_not_found(result_content)
 
+            if not is_found:
+                return ResearchSourceResult(
+                    found=False,
+                    content=None,
+                    reason=result_content,
+                )
+
+            # Partial content detection (Story 4-5)
+            is_partial_content = _is_partial(result_content)
+
             return ResearchSourceResult(
-                found=is_found,
-                content=result_content if is_found else None,
-                reason=result_content if not is_found else None,
+                found=True,
+                content=result_content,
+                partial=is_partial_content,
+                partial_note=(
+                    f"{CATEGORY_LABELS[category]}: Some information may be incomplete or outdated"
+                    if is_partial_content else None
+                ),
             )
 
         except CircuitOpenError:
             return ResearchSourceResult(
                 found=False,
-                reason="LLM provider circuit breaker is open",
+                reason=GAP_REASON_CIRCUIT_OPEN,
             )
         except Exception as e:
             circuit_breaker.record_failure()
             logger.error("LLM Provider error for %s: %s", category.value, e)
             return ResearchSourceResult(
                 found=False,
-                reason=f"Research error: {str(e)}",
+                reason=f"{GAP_REASON_ERROR_PREFIX}: {str(e)}",
             )
 
     async def _synthesize_findings(

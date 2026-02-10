@@ -13,6 +13,7 @@ export interface Application {
   status: ApplicationStatus;
   keywords: string | null;
   research_data: string | null;
+  manual_context: string | null;
   resume_content: string | null;
   cover_letter_content: string | null;
   created_at: string;
@@ -78,6 +79,50 @@ export async function updateApplicationStatus(id: number, status: ApplicationSta
 
 export async function startResearch(id: number): Promise<{ status: string }> {
   return apiRequest<{ status: string }>(`/applications/${id}/research`, {
+    method: 'POST',
+  });
+}
+
+export interface ManualContextResponse {
+  application_id: number;
+  manual_context: string;
+  gaps: string[];
+}
+
+export interface ManualContextSaveResponse {
+  application_id: number;
+  manual_context: string;
+  message: string;
+}
+
+export async function getManualContext(id: number): Promise<ManualContextResponse> {
+  return apiRequest<ManualContextResponse>(`/applications/${id}/context`);
+}
+
+export async function saveManualContext(
+  id: number,
+  manualContext: string,
+): Promise<ManualContextSaveResponse> {
+  return apiRequest<ManualContextSaveResponse>(`/applications/${id}/context`, {
+    method: 'PATCH',
+    body: JSON.stringify({ manual_context: manualContext }),
+  });
+}
+
+export interface ApprovalResponse {
+  application_id: number;
+  status: string;
+  approved_at: string;
+  research_summary: {
+    sources_found: number;
+    gaps: string[];
+    has_manual_context: boolean;
+  };
+  message: string;
+}
+
+export async function approveResearch(id: number): Promise<ApprovalResponse> {
+  return apiRequest<ApprovalResponse>(`/applications/${id}/research/approve`, {
     method: 'POST',
   });
 }

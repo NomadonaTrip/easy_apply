@@ -23,6 +23,7 @@ from app.services.research_service import (
     CATEGORY_MESSAGES,
     CATEGORY_PROMPT_KWARGS,
     NOT_FOUND_INDICATORS,
+    GAP_REASON_CIRCUIT_OPEN,
     _is_not_found,
 )
 
@@ -664,7 +665,7 @@ class TestResearchCategoryExecution:
         )
 
         assert result.found is False
-        assert "circuit breaker" in result.reason.lower()
+        assert result.reason == GAP_REASON_CIRCUIT_OPEN
 
     @pytest.mark.asyncio
     async def test_category_research_tool_failure_handled(self, monkeypatch):
@@ -1619,3 +1620,98 @@ class TestResearchEndpoints:
         )
         assert response.status_code == 400
         assert "company name and job posting" in response.json()["detail"]
+
+
+# ============================================================================
+# Gap Detection & Partial Information Tests (Story 4-5, Task 1)
+# ============================================================================
+
+
+class TestPartialDetection:
+    """Test partial content detection logic."""
+
+    def test_partial_indicator_limited_information(self):
+        from app.services.research_service import _is_partial
+        assert _is_partial("Limited information available about strategic initiatives. The company appears to be in the AI space.") is True
+
+    def test_partial_indicator_incomplete(self):
+        from app.services.research_service import _is_partial
+        assert _is_partial("Information is incomplete. Only the company's career page mentions culture values.") is True
+
+    def test_partial_indicator_only_found(self):
+        from app.services.research_service import _is_partial
+        assert _is_partial("Could only find limited details about leadership direction from a single press release.") is True
+
+    def test_no_partial_for_normal_content(self):
+        from app.services.research_service import _is_partial
+        content = (
+            "TestCorp is a leading AI company focused on enterprise solutions. "
+            "They have raised $200M in Series C funding and are expanding into "
+            "healthcare and financial services markets."
+        )
+        assert _is_partial(content) is False
+
+    def test_no_partial_for_empty_string(self):
+        from app.services.research_service import _is_partial
+        assert _is_partial("") is False
+
+
+class TestResearchSourceResultPartialFields:
+    """Test that ResearchSourceResult supports partial fields."""
+
+    def test_partial_result_fields(self):
+        result = ResearchSourceResult(
+            found=True,
+            content="Some partial data about the company",
+            partial=True,
+            partial_note="Only careers page found, no additional public statements",
+        )
+        assert result.found is True
+        assert result.partial is True
+        assert result.partial_note is not None
+        assert result.content is not None
+
+    def test_default_partial_is_false(self):
+        result = ResearchSourceResult(found=True, content="Full data")
+        assert result.partial is False
+        assert result.partial_note is None
+
+    def test_not_found_with_no_partial(self):
+        result = ResearchSourceResult(found=False, reason="Not found")
+        assert result.partial is False
+
+
+class TestCategoryResearchPartialDetection:
+    """Test that _research_category detects and flags partial content."""
+
+    @pytest.mark.asyncio
+    async def test_partial_content_detected(self, monkeypatch):
+        service = ResearchService()
+        cb = CircuitBreaker()
+
+        mock_response = MagicMock()
+        mock_response.content = "Limited information available. The company appears to value innovation based on their careers page."
+        mock_response.tool_calls = None
+
+        mock_provider = AsyncMock()
+        mock_provider.generate_with_tools = AsyncMock(return_value=(mock_response, []))
+
+        monkeypatch.setattr("app.llm.get_llm_provider", lambda: mock_provider)
+
+        mock_registry = MagicMock()
+        mock_registry.get_all.return_value = []
+        monkeypatch.setattr("app.llm.tools.ToolRegistry", lambda config: mock_registry)
+
+        result = await service._research_category(
+            ResearchCategory.CULTURE_VALUES,
+            "TestCorp",
+            "Some job posting",
+            cb,
+        )
+
+        assert result.found is True
+        assert result.partial is True
+        assert result.partial_note is not None
+        assert result.content is not None
+
+

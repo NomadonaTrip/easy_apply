@@ -3,12 +3,14 @@
 import asyncio
 import logging
 import re
+from typing import Optional
 
 from google.genai.errors import ClientError
 
 from app.llm import Message
 from app.llm.base import Tool
 from app.llm.types import ToolCall
+from app.models.research import ResearchResult
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +58,55 @@ async def generate_with_retry(provider, messages: list[Message], config=None) ->
                 await asyncio.sleep(delay)
             else:
                 raise
+
+
+def build_research_context(research: ResearchResult) -> tuple[str, Optional[str]]:
+    """Build research context and gap note for generation prompts.
+
+    Extracts found research content into a formatted string and produces
+    a gap note listing missing categories. Generation services should include
+    both in their prompts so the LLM knows what context is available vs missing.
+
+    Args:
+        research: Parsed ResearchResult from application.research_data.
+
+    Returns:
+        Tuple of (research_context_str, gap_note_str_or_none).
+        research_context_str: Formatted research findings for prompt injection.
+        gap_note_str: Note about missing categories, or None if no gaps.
+    """
+    category_labels = {
+        "strategic_initiatives": "Strategic Initiatives",
+        "competitive_landscape": "Competitive Landscape",
+        "news_momentum": "Recent News & Momentum",
+        "industry_context": "Industry Context",
+        "culture_values": "Culture & Values",
+        "leadership_direction": "Leadership Direction",
+    }
+
+    research_parts: list[str] = []
+    for key, label in category_labels.items():
+        source_data = getattr(research, key, None)
+        if source_data and source_data.found and source_data.content:
+            partial_marker = " (Note: this information may be incomplete)" if source_data.partial else ""
+            research_parts.append(f"## {label}{partial_marker}\n{source_data.content}")
+
+    research_context = "\n\n".join(research_parts) if research_parts else "No research data available."
+
+    gap_note: Optional[str] = None
+    if research.gaps:
+        gap_labels = [category_labels.get(g, g) for g in research.gaps]
+        gap_note = (
+            f"Note: The following research categories were unavailable: {', '.join(gap_labels)}. "
+            "Proceed with available information and focus on demonstrated skills and experience."
+        )
+        logger.info(
+            "Generation proceeding with %d gaps: %s",
+            len(research.gaps),
+            ", ".join(research.gaps),
+        )
+
+    return research_context, gap_note
 
 
 async def generate_with_tools_with_retry(

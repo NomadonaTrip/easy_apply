@@ -12,6 +12,7 @@ import { KeywordsPage } from '@/pages/applications/KeywordsPage';
 import { ApplicationDetailPage } from '@/pages/applications/ApplicationDetailPage';
 import { ResearchPage } from '@/pages/applications/ResearchPage';
 import { ReviewPage } from '@/pages/applications/ReviewPage';
+import { ContextPage } from '@/pages/applications/ContextPage';
 import { ExportPage } from '@/pages/applications/ExportPage';
 import { SSETestPage } from '@/pages/SSETestPage';
 import { AppShell } from '@/components/layout/AppShell';
@@ -104,6 +105,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <ReviewPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/applications/:id/context"
+          element={
+            <ProtectedRoute>
+              <ContextPage />
             </ProtectedRoute>
           }
         />

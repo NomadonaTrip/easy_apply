@@ -16,6 +16,7 @@ vi.mock('@/api/applications', () => ({
   saveKeywords: vi.fn(),
   updateApplicationStatus: vi.fn(),
   startResearch: vi.fn(),
+  approveResearch: vi.fn(),
 }));
 
 const mockResearchData = JSON.stringify({
@@ -45,6 +46,7 @@ const mockApplication: Application = {
   status: 'researching',
   keywords: null,
   research_data: mockResearchData,
+  manual_context: null,
   resume_content: null,
   cover_letter_content: null,
   created_at: '2026-02-01T00:00:00Z',
@@ -71,6 +73,7 @@ function renderPage(initialEntry = '/applications/1/review') {
           <Route path="/applications/:id/review" element={<ReviewPage />} />
           <Route path="/applications/:id/research" element={<div>Research Page</div>} />
           <Route path="/applications/:id/export" element={<div>Export Page</div>} />
+          <Route path="/applications/:id/context" element={<div>Context Page</div>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -154,9 +157,16 @@ describe('ReviewPage', () => {
     });
   });
 
-  it('navigates to export on continue click', async () => {
+  it('navigates to export on continue click after approval', async () => {
     const user = userEvent.setup();
     vi.mocked(applicationsApi.getApplication).mockResolvedValue(mockApplication);
+    vi.mocked(applicationsApi.approveResearch).mockResolvedValue({
+      application_id: 1,
+      status: 'reviewed',
+      approved_at: '2026-02-09T12:00:00Z',
+      research_summary: { sources_found: 5, gaps: ['industry_context'], has_manual_context: false },
+      message: 'Research approved. Ready for document generation.',
+    });
     renderPage();
 
     await waitFor(() => {
@@ -165,7 +175,9 @@ describe('ReviewPage', () => {
 
     await user.click(screen.getByRole('button', { name: /continue to generation/i }));
 
-    expect(screen.getByText('Export Page')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Export Page')).toBeInTheDocument();
+    });
   });
 
   it('renders back button that navigates to research', async () => {
@@ -216,6 +228,103 @@ describe('ReviewPage', () => {
 
     await user.click(screen.getByText('Industry Context'));
 
-    expect(screen.getByText(/Limited public data available/)).toBeInTheDocument();
+    // Text appears in both GapsSummary and the expanded section
+    expect(screen.getAllByText(/Limited public data available/).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('shows approval confirmation section with sources count', async () => {
+    vi.mocked(applicationsApi.getApplication).mockResolvedValue(mockApplication);
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('Ready to Generate Documents')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('5 sources')).toBeInTheDocument();
+    expect(screen.getByText('1 gap')).toBeInTheDocument();
+  });
+
+  it('shows pre-approval checklist items', async () => {
+    vi.mocked(applicationsApi.getApplication).mockResolvedValue(mockApplication);
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("You've reviewed the research summary")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('The company information looks accurate')).toBeInTheDocument();
+    expect(screen.getByText('You accept proceeding with research gaps')).toBeInTheDocument();
+  });
+
+  it('shows gap acknowledgment message in approval section', async () => {
+    vi.mocked(applicationsApi.getApplication).mockResolvedValue(mockApplication);
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('Proceeding with limited research')).toBeInTheDocument();
+    });
+  });
+
+  it('shows add context button that navigates to context page', async () => {
+    const user = userEvent.setup();
+    vi.mocked(applicationsApi.getApplication).mockResolvedValue(mockApplication);
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('Ready to Generate Documents')).toBeInTheDocument();
+    });
+
+    // Click the "Add Context" button within the approval confirmation
+    const addContextButtons = screen.getAllByRole('button', { name: /add context/i });
+    await user.click(addContextButtons[addContextButtons.length - 1]);
+
+    expect(screen.getByText('Context Page')).toBeInTheDocument();
+  });
+
+  it('shows manual context display when context exists', async () => {
+    vi.mocked(applicationsApi.getApplication).mockResolvedValue({
+      ...mockApplication,
+      manual_context: 'The company recently won an innovation award.',
+    });
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('Your Additional Context')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('The company recently won an innovation award.')).toBeInTheDocument();
+  });
+
+  it('shows already-approved button when status is reviewed', async () => {
+    vi.mocked(applicationsApi.getApplication).mockResolvedValue({
+      ...mockApplication,
+      status: 'reviewed',
+    });
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /already approved/i })).toBeInTheDocument();
+    });
+  });
+
+  it('calls approveResearch on continue click', async () => {
+    const user = userEvent.setup();
+    vi.mocked(applicationsApi.getApplication).mockResolvedValue(mockApplication);
+    vi.mocked(applicationsApi.approveResearch).mockResolvedValue({
+      application_id: 1,
+      status: 'reviewed',
+      approved_at: '2026-02-09T12:00:00Z',
+      research_summary: { sources_found: 5, gaps: ['industry_context'], has_manual_context: false },
+      message: 'Research approved. Ready for document generation.',
+    });
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /continue to generation/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /continue to generation/i }));
+
+    expect(applicationsApi.approveResearch).toHaveBeenCalledWith(1);
   });
 });

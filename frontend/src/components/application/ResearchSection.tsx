@@ -4,9 +4,11 @@ interface ResearchSectionProps {
   content: string | null | undefined;
   reason: string | null | undefined;
   isGap: boolean;
+  partial?: boolean | null;
+  partialNote?: string | null;
 }
 
-export function ResearchSection({ content, reason, isGap }: ResearchSectionProps) {
+export function ResearchSection({ content, reason, isGap, partial, partialNote }: ResearchSectionProps) {
   if (isGap || !content) {
     return (
       <div className="flex items-start gap-3 p-4 bg-warning/5 rounded-lg border border-warning/20">
@@ -44,6 +46,19 @@ export function ResearchSection({ content, reason, isGap }: ResearchSectionProps
 
   return (
     <div className="space-y-4 p-4">
+      {/* Partial Information Warning */}
+      {partial && (
+        <div className="flex items-start gap-2 p-3 bg-warning/5 rounded-lg border border-warning/20">
+          <AlertTriangle className="h-4 w-4 text-warning mt-0.5 shrink-0" aria-hidden="true" />
+          <div className="text-sm">
+            <p className="font-medium text-warning-foreground">Partial Information</p>
+            <p className="text-warning-foreground/80 mt-1">
+              {partialNote || 'Some information may be incomplete.'}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Key Insights Box */}
       {keyInsights.length > 0 && (
         <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">

@@ -1,13 +1,19 @@
 """Application API endpoints."""
 
+import json
+from datetime import datetime, timezone
+from html import escape
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.api.deps import get_current_role
 from app.models.role import Role
 from app.models.application import (
-    ApplicationCreate, ApplicationRead, ApplicationUpdate, ApplicationStatus
+    Application, ApplicationCreate, ApplicationRead, ApplicationUpdate, ApplicationStatus
 )
+from app.models.research import ResearchCategory
 from app.models.keyword import Keyword, KeywordList, KeywordExtractionResponse
 from app.services import application_service
 from app.services.keyword_service import extract_keywords, keywords_to_json
@@ -152,3 +158,186 @@ async def update_keywords(
         raise HTTPException(status_code=404, detail="Application not found")
 
     return updated_app
+
+
+class ManualContextUpdate(BaseModel):
+    """Request body for manual context update."""
+    manual_context: str = Field(max_length=5000)
+
+
+class ManualContextSaveResponse(BaseModel):
+    """Response schema for saving manual context."""
+    application_id: int
+    manual_context: str
+    message: str
+
+
+class ManualContextGetResponse(BaseModel):
+    """Response schema for retrieving manual context."""
+    application_id: int
+    manual_context: str
+    gaps: list[str]
+
+
+@router.patch("/{id}/context", response_model=ManualContextSaveResponse)
+async def update_manual_context(
+    id: int,
+    body: ManualContextUpdate,
+    role: Role = Depends(get_current_role),
+):
+    """Add or update manual context for an application."""
+    application = await application_service.get_application(id, role.id)
+    if not application:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    # Sanitize input - escape ALL HTML entities and trim whitespace.
+    # html.escape() converts <, >, &, " and ' to HTML entities,
+    # neutralizing any HTML/script injection vectors.
+    sanitized_context = escape(body.manual_context.strip())
+
+    updated = await application_service.update_manual_context(
+        id, role.id, sanitized_context
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    return ManualContextSaveResponse(
+        application_id=updated.id,
+        manual_context=updated.manual_context or "",
+        message="Context saved successfully",
+    )
+
+
+@router.get("/{id}/context", response_model=ManualContextGetResponse)
+async def get_manual_context(
+    id: int,
+    role: Role = Depends(get_current_role),
+):
+    """Get manual context for an application."""
+    application = await application_service.get_application(id, role.id)
+    if not application:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    gaps: list[str] = []
+    if application.research_data:
+        try:
+            research = json.loads(application.research_data)
+            gaps = research.get("gaps", [])
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    return ManualContextGetResponse(
+        application_id=application.id,
+        manual_context=application.manual_context or "",
+        gaps=gaps,
+    )
+
+
+class ResearchSummaryResponse(BaseModel):
+    """Response schema for research summary data."""
+    sources_found: int
+    gaps: list[str]
+    has_manual_context: bool
+
+
+class ApprovalResponse(BaseModel):
+    """Response from research approval."""
+    application_id: int
+    status: str
+    approved_at: str
+    research_summary: ResearchSummaryResponse
+    message: str
+
+
+def _get_research_summary(application: Application) -> ResearchSummaryResponse:
+    """Extract summary from research data."""
+    if not application.research_data:
+        return ResearchSummaryResponse(
+            sources_found=0, gaps=[], has_manual_context=False
+        )
+
+    try:
+        research = json.loads(application.research_data)
+        gaps = research.get("gaps", [])
+        return ResearchSummaryResponse(
+            sources_found=len(ResearchCategory) - len(gaps),
+            gaps=gaps,
+            has_manual_context=bool(application.manual_context),
+        )
+    except (json.JSONDecodeError, TypeError):
+        return ResearchSummaryResponse(
+            sources_found=0, gaps=[], has_manual_context=False
+        )
+
+
+@router.post("/{id}/research/approve", response_model=ApprovalResponse)
+async def approve_research(
+    id: int,
+    role: Role = Depends(get_current_role),
+):
+    """Approve research findings and proceed to generation.
+
+    State Machine: researching -> reviewed (via this approval)
+
+    Note: This endpoint intentionally uses custom validation instead of
+    VALID_TRANSITIONS to support idempotent approval (returns success if
+    already reviewed), research data existence checks, and graceful
+    handling of past-approval statuses.
+    """
+    application = await application_service.get_application(id, role.id)
+    if not application:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    # Idempotent: already approved
+    if application.status == ApplicationStatus.REVIEWED.value:
+        return ApprovalResponse(
+            application_id=application.id,
+            status=application.status,
+            approved_at=application.updated_at.isoformat() if application.updated_at else datetime.now(timezone.utc).isoformat(),
+            research_summary=_get_research_summary(application),
+            message="Research already approved",
+        )
+
+    # Past approval stage
+    past_statuses = {
+        ApplicationStatus.EXPORTED.value,
+        ApplicationStatus.SENT.value,
+        ApplicationStatus.CALLBACK.value,
+        ApplicationStatus.OFFER.value,
+        ApplicationStatus.CLOSED.value,
+    }
+    if application.status in past_statuses:
+        return ApprovalResponse(
+            application_id=application.id,
+            status=application.status,
+            approved_at=application.updated_at.isoformat() if application.updated_at else datetime.now(timezone.utc).isoformat(),
+            research_summary=_get_research_summary(application),
+            message="Application already past research approval stage",
+        )
+
+    # Only allow from researching status
+    if application.status != ApplicationStatus.RESEARCHING.value:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot approve research from status '{application.status}'. "
+                   f"Application must be in 'researching' status.",
+        )
+
+    # Verify research data exists
+    if not application.research_data:
+        raise HTTPException(
+            status_code=400,
+            detail="No research data found. Run research first.",
+        )
+
+    # Transition to reviewed
+    update_data = ApplicationUpdate(status=ApplicationStatus.REVIEWED)
+    updated = await application_service.update_application(id, role.id, update_data)
+
+    return ApprovalResponse(
+        application_id=updated.id,
+        status=updated.status,
+        approved_at=updated.updated_at.isoformat(),
+        research_summary=_get_research_summary(updated),
+        message="Research approved. Ready for document generation.",
+    )
