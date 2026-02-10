@@ -108,3 +108,21 @@ export async function saveManualContext(
     body: JSON.stringify({ manual_context: manualContext }),
   });
 }
+
+export interface ApprovalResponse {
+  application_id: number;
+  status: string;
+  approved_at: string;
+  research_summary: {
+    sources_found: number;
+    gaps: string[];
+    has_manual_context: boolean;
+  };
+  message: string;
+}
+
+export async function approveResearch(id: number): Promise<ApprovalResponse> {
+  return apiRequest<ApprovalResponse>(`/applications/${id}/research/approve`, {
+    method: 'POST',
+  });
+}

@@ -53,6 +53,8 @@ from .extraction import SKILL_EXTRACTION_PROMPT, ACCOMPLISHMENT_EXTRACTION_PROMP
 from .keyword import KEYWORD_EXTRACTION_PROMPT  # noqa: E402, F401
 from .scrape import JOB_DESCRIPTION_EXTRACTION_PROMPT  # noqa: E402, F401
 from . import research  # noqa: E402, F401
+from . import resume  # noqa: E402, F401
+from . import cover_letter  # noqa: E402, F401
 
 __all__ = [
     "PromptRegistry",

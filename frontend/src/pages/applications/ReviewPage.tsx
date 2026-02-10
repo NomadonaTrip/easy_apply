@@ -1,19 +1,21 @@
 import { useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { WizardStepLayout } from '@/components/layout/WizardStepLayout';
 import { ResearchSummary } from '@/components/application/ResearchSummary';
+import { ApprovalConfirmation } from '@/components/application/ApprovalConfirmation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowRight, ArrowLeft, FileText, MessageSquare, Pencil, Plus } from 'lucide-react';
-import { getApplication } from '@/api/applications';
-import { parseResearchData } from '@/lib/parseResearch';
+import { ArrowLeft, FileText, MessageSquare, Pencil, Plus } from 'lucide-react';
+import { getApplication, approveResearch } from '@/api/applications';
+import { parseResearchData, RESEARCH_CATEGORY_KEYS } from '@/lib/parseResearch';
 
 export function ReviewPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const appId = Number(id);
 
   const { data: application, isLoading, isError } = useQuery({
@@ -36,6 +38,35 @@ export function ReviewPage() {
       });
     }
   }, [gaps]);
+
+  const approvalMutation = useMutation({
+    mutationFn: () => approveResearch(appId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['application', appId] });
+      toast.success('Research approved', {
+        description: 'Proceeding to document generation.',
+      });
+      navigate(`/applications/${id}/export`);
+    },
+    onError: (error) => {
+      toast.error('Approval failed', {
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+    },
+  });
+
+  const handleApprove = () => {
+    approvalMutation.mutate();
+  };
+
+  const handleAddContext = () => {
+    navigate(`/applications/${id}/context`);
+  };
+
+  // If already reviewed or past, redirect to next step
+  const isAlreadyApproved = application?.status === 'reviewed'
+    || application?.status === 'exported'
+    || application?.status === 'sent';
 
   if (isLoading) {
     return (
@@ -62,6 +93,8 @@ export function ReviewPage() {
     );
   }
 
+  const sourcesFound = research ? RESEARCH_CATEGORY_KEYS.length - gaps.length : 0;
+
   return (
     <WizardStepLayout currentStep={4}>
       <Card className="shadow-md">
@@ -84,7 +117,7 @@ export function ReviewPage() {
             <ResearchSummary
               research={research}
               gaps={gaps}
-              onAddContext={() => navigate(`/applications/${id}/context`)}
+              onAddContext={handleAddContext}
             />
           ) : (
             <div className="text-center py-8 text-muted-foreground">
@@ -107,7 +140,7 @@ export function ReviewPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => navigate(`/applications/${id}/context`)}
+                    onClick={handleAddContext}
                   >
                     <Pencil className="h-4 w-4 mr-2" aria-hidden="true" />
                     Edit
@@ -124,7 +157,7 @@ export function ReviewPage() {
             <div className="flex justify-center">
               <Button
                 variant="outline"
-                onClick={() => navigate(`/applications/${id}/context`)}
+                onClick={handleAddContext}
               >
                 <Plus className="h-4 w-4 mr-2" aria-hidden="true" />
                 Add Manual Context
@@ -132,7 +165,19 @@ export function ReviewPage() {
             </div>
           )}
 
-          {/* Navigation */}
+          {/* Approval Section */}
+          {research && (
+            <ApprovalConfirmation
+              sourcesFound={sourcesFound}
+              gaps={gaps}
+              hasManualContext={!!application?.manual_context}
+              onApprove={handleApprove}
+              onAddContext={handleAddContext}
+              isApproving={approvalMutation.isPending}
+            />
+          )}
+
+          {/* Navigation - Back only */}
           <div className="flex justify-between pt-4 border-t">
             <Button
               variant="ghost"
@@ -141,10 +186,11 @@ export function ReviewPage() {
               <ArrowLeft className="h-4 w-4 mr-2" aria-hidden="true" />
               Back
             </Button>
-            <Button onClick={() => navigate(`/applications/${id}/export`)} size="lg">
-              Continue to Generation
-              <ArrowRight className="h-4 w-4 ml-2" aria-hidden="true" />
-            </Button>
+            {isAlreadyApproved && (
+              <Button onClick={() => navigate(`/applications/${id}/export`)} size="lg">
+                Already Approved - Continue
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
