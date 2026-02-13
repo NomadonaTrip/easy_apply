@@ -14,6 +14,7 @@ from app.models.keyword import (
     Keyword, KeywordList, KeywordCategory, KeywordExtractionResponse,
 )
 from app.models.llm_call_log import LLMCallLog, CallRecord
+from app.models.keyword_pattern import KeywordPattern, KeywordPatternRead
 from app.models.research import (
     ResearchStatus, ResearchCategory, ResearchSourceResult,
     ResearchProgressEvent, ResearchCompleteEvent, ResearchErrorEvent,
@@ -29,6 +30,7 @@ __all__ = [
     "Application", "ApplicationCreate", "ApplicationRead", "ApplicationUpdate", "ApplicationStatus",
     "Keyword", "KeywordList", "KeywordCategory", "KeywordExtractionResponse",
     "LLMCallLog", "CallRecord",
+    "KeywordPattern", "KeywordPatternRead",
     "ResearchStatus", "ResearchCategory", "ResearchSourceResult",
     "ResearchProgressEvent", "ResearchCompleteEvent", "ResearchErrorEvent",
     "ResearchResult",

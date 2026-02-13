@@ -14,6 +14,7 @@ const STATUS_TO_STEP: Record<string, number> = {
   keywords: 2,
   researching: 3,
   reviewed: 4,
+  generating: 5,
   exported: 5,
   sent: 5,
   callback: 5,
@@ -36,6 +37,7 @@ export function ApplicationDetailPage() {
       keywords: 'research',
       researching: 'research',
       reviewed: 'review',
+      generating: 'export',
       exported: 'export',
     };
     const status = application?.status || 'created';

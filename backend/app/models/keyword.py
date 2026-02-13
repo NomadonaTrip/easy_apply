@@ -21,6 +21,7 @@ class Keyword(BaseModel):
     text: str = Field(min_length=1, max_length=100)
     priority: int = Field(ge=1, le=10)
     category: KeywordCategory = KeywordCategory.GENERAL
+    pattern_boosted: bool = False
 
 
 class KeywordList(BaseModel):
@@ -35,3 +36,5 @@ class KeywordExtractionResponse(BaseModel):
     application_id: int
     keywords: list[Keyword]
     status: str
+    patterns_applied: bool = False
+    pattern_count: int = 0

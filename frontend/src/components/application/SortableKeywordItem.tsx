@@ -1,6 +1,6 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, ChevronUp, ChevronDown } from 'lucide-react';
+import { GripVertical, ChevronUp, ChevronDown, TrendingUp } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -122,6 +122,15 @@ export function SortableKeywordItem({
         >
           {keyword.category.replace(/_/g, ' ')}
         </Badge>
+        {keyword.pattern_boosted && (
+          <Badge
+            variant="secondary"
+            className="text-xs"
+          >
+            <TrendingUp className="h-3 w-3 mr-1" />
+            Success pattern
+          </Badge>
+        )}
       </div>
 
       <div

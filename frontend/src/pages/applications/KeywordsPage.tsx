@@ -8,8 +8,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useSaveKeywords } from '@/hooks/useKeywords';
 import { getApplication } from '@/api/applications';
 import type { Keyword, KeywordWithId } from '@/api/applications';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { WizardStepLayout } from '@/components/layout/WizardStepLayout';
-import { Loader2, Check } from 'lucide-react';
+import { Loader2, Check, Sparkles } from 'lucide-react';
 
 export function KeywordsPage() {
   const { id } = useParams<{ id: string }>();
@@ -40,7 +41,7 @@ export function KeywordsPage() {
 
   const handleReorder = (newKeywords: KeywordWithId[]) => {
     setLocalKeywords(newKeywords);
-    save(newKeywords.map(({ text, priority, category }) => ({ text, priority, category })));
+    save(newKeywords.map(({ text, priority, category, pattern_boosted }) => ({ text, priority, category, pattern_boosted })));
     setHasSaved(true);
   };
 
@@ -97,6 +98,17 @@ export function KeywordsPage() {
         <div className="mb-4 p-4 bg-destructive/10 text-destructive rounded-md">
           Failed to save keyword order. Please try again.
         </div>
+      )}
+
+      {localKeywords.some((k) => k.pattern_boosted) && (
+        <Alert className="mb-4">
+          <Sparkles className="h-4 w-4" />
+          <AlertTitle>Learning from your success</AlertTitle>
+          <AlertDescription>
+            Keywords ranked based on patterns from your previous successful applications.
+            Keywords marked with "Success pattern" were boosted.
+          </AlertDescription>
+        </Alert>
       )}
 
       <Card className="shadow-md">

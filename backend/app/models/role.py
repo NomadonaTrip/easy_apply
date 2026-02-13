@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from app.models.user import User
     from app.models.experience import Skill, Accomplishment
     from app.models.resume import Resume
+    from app.models.keyword_pattern import KeywordPattern
 
 
 class Role(SQLModel, table=True):
@@ -30,6 +31,7 @@ class Role(SQLModel, table=True):
     skills: list["Skill"] = Relationship(back_populates="role")
     accomplishments: list["Accomplishment"] = Relationship(back_populates="role")
     resumes: list["Resume"] = Relationship(back_populates="role")
+    keyword_patterns: list["KeywordPattern"] = Relationship(back_populates="role")
 
     def __init__(self, **data: Any) -> None:
         """Initialize Role with validation.

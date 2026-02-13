@@ -34,6 +34,7 @@ export interface Keyword {
   text: string;
   priority: number;
   category: string;
+  pattern_boosted?: boolean;
 }
 
 export interface KeywordWithId extends Keyword {
@@ -44,6 +45,8 @@ export interface KeywordExtractionResponse {
   application_id: number;
   keywords: Keyword[];
   status: string;
+  patterns_applied: boolean;
+  pattern_count: number;
 }
 
 export async function getApplications(): Promise<Application[]> {

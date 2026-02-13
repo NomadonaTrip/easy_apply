@@ -17,6 +17,7 @@ from app.models.research import ResearchCategory
 from app.models.keyword import Keyword, KeywordList, KeywordExtractionResponse
 from app.services import application_service
 from app.services.keyword_service import extract_keywords, keywords_to_json
+from app.services import learning_service
 
 
 class StatusUpdate(BaseModel):
@@ -94,7 +95,11 @@ async def update_application_status(
     data: StatusUpdate,
     role: Role = Depends(get_current_role),
 ):
-    """Update application status."""
+    """Update application status.
+
+    When transitioning to callback or offer, records keyword success
+    patterns for future application keyword boosting.
+    """
     application = await application_service.get_application(id, role.id)
     if not application:
         raise HTTPException(status_code=404, detail="Application not found")
@@ -110,6 +115,10 @@ async def update_application_status(
     update_data = ApplicationUpdate(status=data.status)
     updated_app = await application_service.update_application(id, role.id, update_data)
 
+    # Record success patterns when application reaches callback or offer
+    if data.status.value in learning_service.SUCCESS_STATUSES and current_status.value not in learning_service.SUCCESS_STATUSES:
+        await learning_service.record_application_success(application)
+
     return updated_app
 
 
@@ -118,7 +127,11 @@ async def extract_application_keywords(
     id: int,
     role: Role = Depends(get_current_role),
 ):
-    """Extract and store keywords for an application."""
+    """Extract and store keywords for an application.
+
+    Integrates pattern-based boosting from successful past applications.
+    Keywords from applications that led to callbacks/offers are ranked higher.
+    """
     application = await application_service.get_application(id, role.id)
     if not application:
         raise HTTPException(status_code=404, detail="Application not found")
@@ -127,6 +140,37 @@ async def extract_application_keywords(
         raise HTTPException(status_code=400, detail="No job posting to analyze")
 
     keyword_list = await extract_keywords(application.job_posting)
+
+    # Fetch learned patterns and apply boosting
+    patterns_applied = False
+    pattern_count = 0
+    patterns = await learning_service.get_keyword_patterns(role.id)
+
+    if patterns:
+        pattern_count = len(patterns)
+        # Convert keywords to score-based format for boosting
+        kw_dicts = [
+            {"keyword": k.text, "score": k.priority / 10.0, "priority": k.priority, "category": k.category}
+            for k in keyword_list.keywords
+        ]
+        boosted = learning_service.apply_pattern_boost(kw_dicts, patterns)
+        # Convert back to Keyword objects with updated priorities and pattern_boosted flag
+        keyword_list = KeywordList(keywords=[
+            Keyword(
+                text=kw["keyword"],
+                priority=max(1, min(10, round(kw["score"] * 10))),
+                category=kw.get("category", "general"),
+                pattern_boosted=kw.get("pattern_boosted", False),
+            )
+            for kw in boosted
+        ])
+        # Only mark patterns as applied if at least one keyword was actually boosted
+        patterns_applied = any(k.pattern_boosted for k in keyword_list.keywords)
+
+    # Record keyword usage for future pattern learning
+    await learning_service.record_keyword_usage(
+        role.id, [k.text for k in keyword_list.keywords]
+    )
 
     update_data = ApplicationUpdate(
         keywords=keywords_to_json(keyword_list),
@@ -138,6 +182,8 @@ async def extract_application_keywords(
         application_id=updated_app.id,
         keywords=keyword_list.keywords,
         status=updated_app.status,
+        patterns_applied=patterns_applied,
+        pattern_count=pattern_count,
     )
 
 

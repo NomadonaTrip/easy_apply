@@ -93,6 +93,23 @@ describe('KeywordList', () => {
     expect(screen.queryAllByRole('listitem')).toHaveLength(0);
   });
 
+  it('shows success pattern badge for boosted keywords', () => {
+    const keywordsWithPattern: KeywordWithId[] = [
+      { _id: 'kw-0', text: 'Python', priority: 9, category: 'technical_skill', pattern_boosted: true },
+      { _id: 'kw-1', text: 'React', priority: 7, category: 'tool', pattern_boosted: false },
+    ];
+    render(<KeywordList keywords={keywordsWithPattern} onReorder={vi.fn()} />);
+
+    expect(screen.getByText('Success pattern')).toBeInTheDocument();
+    expect(screen.getAllByText('Success pattern')).toHaveLength(1);
+  });
+
+  it('does not show success pattern badge when no keywords are boosted', () => {
+    render(<KeywordList keywords={mockKeywords} onReorder={vi.fn()} />);
+
+    expect(screen.queryByText('Success pattern')).not.toBeInTheDocument();
+  });
+
   it('shows drag handles on desktop', () => {
     render(<KeywordList keywords={mockKeywords} onReorder={vi.fn()} />);
 
