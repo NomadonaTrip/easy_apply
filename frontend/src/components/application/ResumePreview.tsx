@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { RefreshCw, FileText, Clock, AlertCircle, Loader2 } from 'lucide-react';
+import { ConstraintWarnings } from './ConstraintWarnings';
 
 interface ResumePreviewProps {
   resumeContent: string | null;
@@ -22,6 +23,8 @@ interface ResumePreviewProps {
   isGenerating: boolean;
   error: Error | null;
   generatedAt: string | null;
+  violationsFixed?: number;
+  warnings?: string[];
 }
 
 export function ResumePreview({
@@ -31,6 +34,8 @@ export function ResumePreview({
   isGenerating,
   error,
   generatedAt,
+  violationsFixed,
+  warnings,
 }: ResumePreviewProps) {
   const [showConfirm, setShowConfirm] = useState(false);
   const isGeneratingResume = isGenerating || generationStatus === 'generating_resume';
@@ -137,7 +142,13 @@ export function ResumePreview({
           </Button>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
+        {(violationsFixed !== undefined || warnings !== undefined) && (
+          <ConstraintWarnings
+            violationsFixed={violationsFixed ?? 0}
+            warnings={warnings ?? []}
+          />
+        )}
         <div className="prose prose-sm max-w-none dark:prose-invert bg-muted/30 p-6 rounded-lg max-h-[600px] overflow-y-auto">
           <ReactMarkdown>{resumeContent ?? ''}</ReactMarkdown>
         </div>

@@ -5,12 +5,18 @@ export interface GenerateResumeResponse {
   message: string;
   resume_content: string;
   status: string;
+  violations_fixed: number;
+  violations_remaining: number;
+  warnings: string[];
 }
 
 export interface GenerateCoverLetterResponse {
   message: string;
   cover_letter_content: string;
   status: string;
+  violations_fixed: number;
+  violations_remaining: number;
+  warnings: string[];
 }
 
 export interface GenerationStatusResponse {

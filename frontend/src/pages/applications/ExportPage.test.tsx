@@ -51,6 +51,10 @@ const mockReviewedApp: Application = {
   resume_content: null,
   cover_letter_content: null,
   cover_letter_tone: null,
+  resume_violations_fixed: null,
+  resume_constraint_warnings: null,
+  cover_letter_violations_fixed: null,
+  cover_letter_constraint_warnings: null,
   created_at: '2026-02-01T00:00:00Z',
   updated_at: '2026-02-09T00:00:00Z',
 };
@@ -197,6 +201,9 @@ describe('ExportPage', () => {
         message: 'Resume generated successfully',
         resume_content: '# Test Resume',
         status: 'complete',
+        violations_fixed: 0,
+        violations_remaining: 0,
+        warnings: [],
       });
       renderPage();
 
@@ -309,6 +316,9 @@ describe('ExportPage', () => {
         message: 'Resume generated successfully',
         resume_content: '# New Resume',
         status: 'complete',
+        violations_fixed: 0,
+        violations_remaining: 0,
+        warnings: [],
       });
       renderPage();
 
@@ -440,6 +450,9 @@ describe('ExportPage', () => {
         message: 'Cover letter generated',
         cover_letter_content: 'Dear Hiring Manager,\n\nTest.',
         status: 'complete',
+        violations_fixed: 0,
+        violations_remaining: 0,
+        warnings: [],
       });
       renderPage();
 

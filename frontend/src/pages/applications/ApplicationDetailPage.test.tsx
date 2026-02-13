@@ -31,6 +31,11 @@ const mockApplication: applicationsApi.Application = {
   generation_status: 'idle',
   resume_content: null,
   cover_letter_content: null,
+  cover_letter_tone: null,
+  resume_violations_fixed: null,
+  resume_constraint_warnings: null,
+  cover_letter_violations_fixed: null,
+  cover_letter_constraint_warnings: null,
   created_at: '2026-02-01T10:00:00Z',
   updated_at: '2026-02-02T15:30:00Z',
 };

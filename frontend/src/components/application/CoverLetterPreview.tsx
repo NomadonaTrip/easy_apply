@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert } from '@/components/ui/alert';
 import { ToneSelector } from './ToneSelector';
 import { useGenerateCoverLetter } from '@/hooks/useGeneration';
+import { ConstraintWarnings } from './ConstraintWarnings';
 import { RefreshCw, Mail, Edit2, Loader2, AlertCircle } from 'lucide-react';
 import {
   Dialog,
@@ -21,6 +22,8 @@ interface CoverLetterPreviewProps {
   coverLetterContent: string | null;
   currentTone: CoverLetterTone | null;
   generationStatus: string;
+  violationsFixed?: number;
+  warnings?: string[];
 }
 
 const TONE_LABELS: Record<string, string> = {
@@ -34,6 +37,8 @@ export function CoverLetterPreview({
   coverLetterContent,
   currentTone,
   generationStatus,
+  violationsFixed,
+  warnings,
 }: CoverLetterPreviewProps) {
   const [selectedTone, setSelectedTone] = useState<CoverLetterTone>(currentTone || 'formal');
   const [showToneDialog, setShowToneDialog] = useState(false);
@@ -190,7 +195,13 @@ export function CoverLetterPreview({
           </Button>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
+        {(generateCoverLetter.data || violationsFixed !== undefined || warnings !== undefined) && (
+          <ConstraintWarnings
+            violationsFixed={generateCoverLetter.data?.violations_fixed ?? violationsFixed ?? 0}
+            warnings={generateCoverLetter.data?.warnings ?? warnings ?? []}
+          />
+        )}
         <div className="bg-muted/30 p-6 rounded-lg max-h-[600px] overflow-y-auto">
           <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">
             {coverLetterContent}

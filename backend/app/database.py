@@ -98,6 +98,29 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
+def _ensure_columns(conn):
+    """Add missing columns to existing tables (lightweight migration).
+
+    SQLModel's create_all only creates new tables, not new columns on
+    existing tables.  This handles the gap for SQLite deployments.
+    """
+    import sqlalchemy
+
+    result = conn.execute(sqlalchemy.text("PRAGMA table_info(applications)"))
+    existing = {row[1] for row in result.fetchall()}
+
+    for col, typ in {
+        "resume_violations_fixed": "INTEGER",
+        "resume_constraint_warnings": "TEXT",
+        "cover_letter_violations_fixed": "INTEGER",
+        "cover_letter_constraint_warnings": "TEXT",
+    }.items():
+        if col not in existing:
+            conn.execute(
+                sqlalchemy.text(f"ALTER TABLE applications ADD COLUMN {col} {typ}")
+            )
+
+
 async def init_db():
     """Initialize database tables."""
     # Import models here to ensure they're registered with SQLModel metadata
@@ -109,3 +132,4 @@ async def init_db():
     from app.models.llm_call_log import LLMCallLog  # noqa: F401
     async with _engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
+        await conn.run_sync(_ensure_columns)

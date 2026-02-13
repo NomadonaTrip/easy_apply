@@ -12,7 +12,8 @@ from app.models.application import Application, ApplicationUpdate, GenerationSta
 from app.models.research import ResearchResult
 from app.services import application_service, experience_service
 from app.utils.llm_helpers import build_research_context, generate_with_retry
-from app.utils.text_processing import enforce_output_constraints
+from app.utils.constraints import ViolationSeverity
+from app.utils.text_processing import enforce_output_constraints_detailed
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ async def build_generation_context(
             research_context, gap_note_result = build_research_context(research)
             gap_note = gap_note_result or ""
             gap_categories = research.gaps
-        except (json.JSONDecodeError, Exception) as e:
+        except Exception as e:
             logger.warning("Failed to parse research data: %s", e)
 
     # Manual context
@@ -86,11 +87,13 @@ async def build_generation_context(
 async def generate_resume(
     application_id: int,
     role_id: int,
-) -> str:
+) -> dict:
     """Generate a tailored resume for an application.
 
     Updates generation_status throughout the process.
     Uses PromptRegistry for prompts and generate_with_retry for resilience.
+
+    Returns dict with content, violations_fixed, violations_remaining, warnings.
     """
     application = await application_service.get_application(application_id, role_id)
     if not application:
@@ -117,19 +120,41 @@ async def generate_resume(
             provider.set_system_instruction(skill_content)
 
         # Generate with retry
-        config = GenerationConfig(prompt_name="generation_resume")
+        config = GenerationConfig(prompt_name="generation_resume", max_tokens=8192)
         messages = [
             Message(role=Role.SYSTEM, content=system_prompt),
             Message(role=Role.USER, content=prompt),
         ]
         response = await generate_with_retry(provider, messages, config)
-        resume_content = enforce_output_constraints(response.content)
+        if response.finish_reason == "MAX_TOKENS":
+            logger.warning(
+                "Resume generation truncated for application %d (hit max_tokens)",
+                application_id,
+            )
 
-        # Save content and update status
+        # Enforce constraints with detailed reporting
+        constraint_result = enforce_output_constraints_detailed(response.content)
+        resume_content = constraint_result.cleaned_text
+
+        if constraint_result.violations_remaining > 0:
+            logger.warning(
+                "Resume for application %d has %d constraint violations after processing",
+                application_id, constraint_result.violations_remaining,
+            )
+
+        # Build warnings list
+        warnings = [
+            v.message for v in constraint_result.violations
+            if v.severity == ViolationSeverity.WARNING
+        ]
+
+        # Save content and constraint metadata
         await _save_generation_result(
             application_id, role_id,
             resume_content=resume_content,
             generation_status=GenerationStatus.COMPLETE,
+            resume_violations_fixed=constraint_result.violations_fixed,
+            resume_constraint_warnings=json.dumps(warnings),
         )
 
         # Log gap impact after successful generation (AC #10)
@@ -137,11 +162,17 @@ async def generate_resume(
             _log_gap_impact("generation_resume", context["gap_categories"], context["gap_note"], outcome="success")
 
         logger.info(
-            "Resume generated for application %d (role %d), %d chars",
+            "Resume generated for application %d (role %d), %d chars, %d violations fixed, %d remaining",
             application_id, role_id, len(resume_content),
+            constraint_result.violations_fixed, constraint_result.violations_remaining,
         )
 
-        return resume_content
+        return {
+            "content": resume_content,
+            "violations_fixed": constraint_result.violations_fixed,
+            "violations_remaining": constraint_result.violations_remaining,
+            "warnings": warnings,
+        }
 
     except Exception as e:
         logger.error(
@@ -158,13 +189,15 @@ async def generate_cover_letter(
     application_id: int,
     role_id: int,
     tone: str = "formal",
-) -> str:
+) -> dict:
     """Generate a tailored cover letter for an application.
 
     Args:
         application_id: Application to generate for
         role_id: Role for data isolation
         tone: One of 'formal', 'conversational', 'match_culture'
+
+    Returns dict with content, violations_fixed, violations_remaining, warnings.
     """
     valid_tones = ["formal", "conversational", "match_culture"]
     if tone not in valid_tones:
@@ -189,20 +222,42 @@ async def generate_cover_letter(
 
         # Generate
         provider = get_llm_provider()
-        config = GenerationConfig(prompt_name="generation_cover_letter")
+        config = GenerationConfig(prompt_name="generation_cover_letter", max_tokens=8192)
         messages = [
             Message(role=Role.SYSTEM, content=system_prompt),
             Message(role=Role.USER, content=prompt),
         ]
         response = await generate_with_retry(provider, messages, config)
-        cover_letter_content = enforce_output_constraints(response.content)
+        if response.finish_reason == "MAX_TOKENS":
+            logger.warning(
+                "Cover letter generation truncated for application %d (hit max_tokens)",
+                application_id,
+            )
 
-        # Save
+        # Enforce constraints with detailed reporting
+        constraint_result = enforce_output_constraints_detailed(response.content)
+        cover_letter_content = constraint_result.cleaned_text
+
+        if constraint_result.violations_remaining > 0:
+            logger.warning(
+                "Cover letter for application %d has %d constraint violations after processing",
+                application_id, constraint_result.violations_remaining,
+            )
+
+        # Build warnings list
+        warnings = [
+            v.message for v in constraint_result.violations
+            if v.severity == ViolationSeverity.WARNING
+        ]
+
+        # Save content and constraint metadata
         await _save_generation_result(
             application_id, role_id,
             cover_letter_content=cover_letter_content,
             cover_letter_tone=tone,
             generation_status=GenerationStatus.COMPLETE,
+            cover_letter_violations_fixed=constraint_result.violations_fixed,
+            cover_letter_constraint_warnings=json.dumps(warnings),
         )
 
         # Log gap impact after successful generation (AC #10)
@@ -210,11 +265,17 @@ async def generate_cover_letter(
             _log_gap_impact("generation_cover_letter", context["gap_categories"], context["gap_note"], outcome="success")
 
         logger.info(
-            "Cover letter generated for application %d (role %d), tone=%s, %d chars",
+            "Cover letter generated for application %d (role %d), tone=%s, %d chars, %d violations fixed, %d remaining",
             application_id, role_id, tone, len(cover_letter_content),
+            constraint_result.violations_fixed, constraint_result.violations_remaining,
         )
 
-        return cover_letter_content
+        return {
+            "content": cover_letter_content,
+            "violations_fixed": constraint_result.violations_fixed,
+            "violations_remaining": constraint_result.violations_remaining,
+            "warnings": warnings,
+        }
 
     except Exception as e:
         logger.error(
@@ -264,8 +325,12 @@ async def _save_generation_result(
     cover_letter_content: Optional[str] = None,
     cover_letter_tone: Optional[str] = None,
     generation_status: GenerationStatus = GenerationStatus.COMPLETE,
+    resume_violations_fixed: Optional[int] = None,
+    resume_constraint_warnings: Optional[str] = None,
+    cover_letter_violations_fixed: Optional[int] = None,
+    cover_letter_constraint_warnings: Optional[str] = None,
 ) -> None:
-    """Save generation result to application record."""
+    """Save generation result and constraint metadata to application record."""
     update = ApplicationUpdate(generation_status=generation_status)
     if resume_content is not None:
         update.resume_content = resume_content
@@ -273,5 +338,13 @@ async def _save_generation_result(
         update.cover_letter_content = cover_letter_content
     if cover_letter_tone is not None:
         update.cover_letter_tone = cover_letter_tone
+    if resume_violations_fixed is not None:
+        update.resume_violations_fixed = resume_violations_fixed
+    if resume_constraint_warnings is not None:
+        update.resume_constraint_warnings = resume_constraint_warnings
+    if cover_letter_violations_fixed is not None:
+        update.cover_letter_violations_fixed = cover_letter_violations_fixed
+    if cover_letter_constraint_warnings is not None:
+        update.cover_letter_constraint_warnings = cover_letter_constraint_warnings
 
     await application_service.update_application(application_id, role_id, update)

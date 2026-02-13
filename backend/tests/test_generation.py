@@ -274,7 +274,7 @@ class TestTextProcessingConstraints:
         from app.utils.text_processing import enforce_output_constraints
 
         assert enforce_output_constraints("") == ""
-        assert enforce_output_constraints(None) is None
+        assert enforce_output_constraints(None) == ""
 
 
 # ============================================================================

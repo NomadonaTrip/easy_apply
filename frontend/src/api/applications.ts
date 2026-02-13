@@ -20,6 +20,10 @@ export interface Application {
   resume_content: string | null;
   cover_letter_content: string | null;
   cover_letter_tone: CoverLetterTone | null;
+  resume_violations_fixed: number | null;
+  resume_constraint_warnings: string | null;
+  cover_letter_violations_fixed: number | null;
+  cover_letter_constraint_warnings: string | null;
   created_at: string;
   updated_at: string;
 }

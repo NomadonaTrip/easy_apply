@@ -31,6 +31,7 @@ class Message:
     content: str
     tool_calls: list[ToolCall] | None = None
     tool_call_id: str | None = None  # For tool response messages
+    finish_reason: str | None = None  # "STOP", "MAX_TOKENS", etc.
 
 
 @dataclass
@@ -52,6 +53,7 @@ class GenerationConfig:
     top_k: int = 40
     stop_sequences: list[str] = field(default_factory=list)
     prompt_name: str | None = None  # For observability tracking via InstrumentedProvider
+    response_mime_type: str | None = None  # "application/json" for guaranteed JSON output
 
 
 @dataclass

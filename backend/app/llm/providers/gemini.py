@@ -123,6 +123,7 @@ class GeminiProvider(LLMProvider):
             top_k=config.top_k,
             stop_sequences=config.stop_sequences if config.stop_sequences else None,
             system_instruction=self._system_instruction,
+            response_mime_type=config.response_mime_type,
         )
 
         if tools:
@@ -158,6 +159,18 @@ class GeminiProvider(LLMProvider):
 
         return tool_calls
 
+    def _extract_finish_reason(self, response) -> str | None:
+        """Extract finish reason from Gemini response.
+
+        Returns string like "STOP", "MAX_TOKENS", "SAFETY", etc.
+        Returns None if no candidates present.
+        """
+        if response.candidates and len(response.candidates) > 0:
+            reason = response.candidates[0].finish_reason
+            # The Gemini SDK returns a FinishReason enum; convert to string
+            return reason.name if reason else None
+        return None
+
     def _extract_text(self, response) -> str:
         """Extract text content from Gemini response."""
         if hasattr(response, "text") and response.text:
@@ -188,7 +201,11 @@ class GeminiProvider(LLMProvider):
             config=gen_config,
         )
 
-        return Message(role=Role.ASSISTANT, content=self._extract_text(response))
+        return Message(
+            role=Role.ASSISTANT,
+            content=self._extract_text(response),
+            finish_reason=self._extract_finish_reason(response),
+        )
 
     async def generate_stream(
         self,
@@ -229,6 +246,11 @@ class GeminiProvider(LLMProvider):
         content = self._extract_text(response)
 
         return (
-            Message(role=Role.ASSISTANT, content=content, tool_calls=tool_calls),
+            Message(
+                role=Role.ASSISTANT,
+                content=content,
+                tool_calls=tool_calls,
+                finish_reason=self._extract_finish_reason(response),
+            ),
             tool_calls,
         )

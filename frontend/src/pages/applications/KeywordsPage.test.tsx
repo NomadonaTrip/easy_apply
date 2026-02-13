@@ -34,6 +34,11 @@ const mockApplication = {
   generation_status: 'idle',
   resume_content: null,
   cover_letter_content: null,
+  cover_letter_tone: null,
+  resume_violations_fixed: null,
+  resume_constraint_warnings: null,
+  cover_letter_violations_fixed: null,
+  cover_letter_constraint_warnings: null,
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
 };

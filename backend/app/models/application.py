@@ -46,6 +46,10 @@ class Application(SQLModel, table=True):
     resume_content: Optional[str] = Field(default=None)
     cover_letter_content: Optional[str] = Field(default=None)
     cover_letter_tone: Optional[str] = Field(default=None, max_length=50)
+    resume_violations_fixed: Optional[int] = Field(default=None)
+    resume_constraint_warnings: Optional[str] = Field(default=None)  # JSON list
+    cover_letter_violations_fixed: Optional[int] = Field(default=None)
+    cover_letter_constraint_warnings: Optional[str] = Field(default=None)  # JSON list
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
@@ -105,6 +109,10 @@ class ApplicationRead(SQLModel):
     resume_content: Optional[str]
     cover_letter_content: Optional[str]
     cover_letter_tone: Optional[str]
+    resume_violations_fixed: Optional[int]
+    resume_constraint_warnings: Optional[str]
+    cover_letter_violations_fixed: Optional[int]
+    cover_letter_constraint_warnings: Optional[str]
     created_at: datetime
     updated_at: datetime
 
@@ -124,3 +132,7 @@ class ApplicationUpdate(SQLModel):
     resume_content: Optional[str] = None
     cover_letter_content: Optional[str] = None
     cover_letter_tone: Optional[str] = Field(default=None, max_length=50)
+    resume_violations_fixed: Optional[int] = None
+    resume_constraint_warnings: Optional[str] = None
+    cover_letter_violations_fixed: Optional[int] = None
+    cover_letter_constraint_warnings: Optional[str] = None

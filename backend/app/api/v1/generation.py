@@ -19,6 +19,9 @@ class GenerateResumeResponse(BaseModel):
     message: str
     resume_content: str
     status: str
+    violations_fixed: int = 0
+    violations_remaining: int = 0
+    warnings: list[str] = []
 
 
 class GenerateCoverLetterRequest(BaseModel):
@@ -29,6 +32,9 @@ class GenerateCoverLetterResponse(BaseModel):
     message: str
     cover_letter_content: str
     status: str
+    violations_fixed: int = 0
+    violations_remaining: int = 0
+    warnings: list[str] = []
 
 
 class GenerationStatusResponse(BaseModel):
@@ -69,11 +75,14 @@ async def generate_resume(
         )
 
     try:
-        content = await generation_service.generate_resume(application_id, role.id)
+        result = await generation_service.generate_resume(application_id, role.id)
         return GenerateResumeResponse(
             message="Resume generated successfully",
-            resume_content=content,
+            resume_content=result["content"],
             status="complete",
+            violations_fixed=result["violations_fixed"],
+            violations_remaining=result["violations_remaining"],
+            warnings=result["warnings"],
         )
     except Exception as e:
         logger.error("Resume generation failed: %s", e)
@@ -106,13 +115,16 @@ async def generate_cover_letter(
         )
 
     try:
-        content = await generation_service.generate_cover_letter(
+        result = await generation_service.generate_cover_letter(
             application_id, role.id, request.tone,
         )
         return GenerateCoverLetterResponse(
             message="Cover letter generated successfully",
-            cover_letter_content=content,
+            cover_letter_content=result["content"],
             status="complete",
+            violations_fixed=result["violations_fixed"],
+            violations_remaining=result["violations_remaining"],
+            warnings=result["warnings"],
         )
     except Exception as e:
         logger.error("Cover letter generation failed: %s", e)

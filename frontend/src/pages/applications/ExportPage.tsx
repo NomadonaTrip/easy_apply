@@ -13,6 +13,11 @@ import { ArrowLeft, AlertCircle, FileText } from 'lucide-react';
 import { getApplication } from '@/api/applications';
 import { useGenerateResume } from '@/hooks/useGeneration';
 
+function parseJsonSafe(json: string | null): string[] | undefined {
+  if (!json) return undefined;
+  try { return JSON.parse(json); } catch { return undefined; }
+}
+
 export function ExportPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -127,6 +132,10 @@ export function ExportPage() {
                   isGenerating={generateResumeMutation.isPending}
                   error={generateResumeMutation.error}
                   generatedAt={application.resume_content ? application.updated_at : null}
+                  violationsFixed={generateResumeMutation.data?.violations_fixed
+                    ?? application.resume_violations_fixed ?? undefined}
+                  warnings={generateResumeMutation.data?.warnings
+                    ?? parseJsonSafe(application.resume_constraint_warnings)}
                 />
               </TabsContent>
 
@@ -136,6 +145,8 @@ export function ExportPage() {
                   coverLetterContent={application.cover_letter_content}
                   currentTone={application.cover_letter_tone}
                   generationStatus={application.generation_status}
+                  violationsFixed={application.cover_letter_violations_fixed ?? undefined}
+                  warnings={parseJsonSafe(application.cover_letter_constraint_warnings)}
                 />
               </TabsContent>
             </Tabs>
