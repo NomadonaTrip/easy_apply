@@ -46,6 +46,8 @@ class Application(SQLModel, table=True):
     resume_content: Optional[str] = Field(default=None)
     cover_letter_content: Optional[str] = Field(default=None)
     cover_letter_tone: Optional[str] = Field(default=None, max_length=50)
+    resume_approved: bool = Field(default=False)
+    cover_letter_approved: bool = Field(default=False)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
@@ -105,6 +107,8 @@ class ApplicationRead(SQLModel):
     resume_content: Optional[str]
     cover_letter_content: Optional[str]
     cover_letter_tone: Optional[str]
+    resume_approved: bool
+    cover_letter_approved: bool
     created_at: datetime
     updated_at: datetime
 
@@ -124,3 +128,5 @@ class ApplicationUpdate(SQLModel):
     resume_content: Optional[str] = None
     cover_letter_content: Optional[str] = None
     cover_letter_tone: Optional[str] = Field(default=None, max_length=50)
+    resume_approved: Optional[bool] = None
+    cover_letter_approved: Optional[bool] = None

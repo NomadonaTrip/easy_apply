@@ -1,15 +1,39 @@
+import { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
 import { ResumeUploader } from '@/components/resumes';
-import { SkillsList, AccomplishmentsList } from '@/components/experience';
-import { useExperienceStats } from '@/hooks/useExperience';
+import { SkillsList, AccomplishmentsList, EnrichmentSuggestions } from '@/components/experience';
+import { useExperienceStats, useEnrichmentStats } from '@/hooks/useExperience';
 import { useRoleStore } from '@/stores/roleStore';
 import { Button } from '@/components/ui/button';
-import { Award, FileText, Upload } from 'lucide-react';
+import { Award, FileText, Upload, Lightbulb } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 
 export function ExperiencePage() {
   const currentRole = useRoleStore((s) => s.currentRole);
   const { data: stats } = useExperienceStats();
+  const { data: enrichmentStats } = useEnrichmentStats();
+
+  const hasData = stats && (stats.total_skills > 0 || stats.total_accomplishments > 0);
+
+  const [activeTab, setActiveTab] = useState<string | undefined>(undefined);
+
+  // Auto-select suggestions tab when enrichment data first loads with pending items.
+  // Only fires when activeTab is still undefined (user has not yet manually switched).
+  useEffect(() => {
+    if (activeTab === undefined && enrichmentStats) {
+      if (enrichmentStats.pending_count > 0) {
+        setActiveTab("suggestions");
+      } else if (hasData) {
+        setActiveTab("skills");
+      } else {
+        setActiveTab("upload");
+      }
+    }
+  }, [enrichmentStats, hasData, activeTab]);
+
+  // Fallback for initial render before data loads
+  const tabValue = activeTab ?? (hasData ? "skills" : "upload");
 
   if (!currentRole) {
     return (
@@ -22,8 +46,6 @@ export function ExperiencePage() {
       </div>
     );
   }
-
-  const hasData = stats && (stats.total_skills > 0 || stats.total_accomplishments > 0);
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -60,7 +82,7 @@ export function ExperiencePage() {
         </div>
       )}
 
-      <Tabs defaultValue={hasData ? "skills" : "upload"} className="space-y-4">
+      <Tabs value={tabValue} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
           <TabsTrigger value="skills" className="flex items-center gap-2">
             <Award className="h-4 w-4" />
@@ -69,6 +91,15 @@ export function ExperiencePage() {
           <TabsTrigger value="accomplishments" className="flex items-center gap-2">
             <FileText className="h-4 w-4" />
             Accomplishments
+          </TabsTrigger>
+          <TabsTrigger value="suggestions" className="flex items-center gap-2">
+            <Lightbulb className="h-4 w-4" />
+            Suggestions
+            {enrichmentStats && enrichmentStats.pending_count > 0 && (
+              <Badge variant="default" className="ml-1 h-5 min-w-5 px-1.5 text-[10px]">
+                {enrichmentStats.pending_count}
+              </Badge>
+            )}
           </TabsTrigger>
           <TabsTrigger value="upload" className="flex items-center gap-2">
             <Upload className="h-4 w-4" />
@@ -82,6 +113,10 @@ export function ExperiencePage() {
 
         <TabsContent value="accomplishments">
           <AccomplishmentsList />
+        </TabsContent>
+
+        <TabsContent value="suggestions">
+          <EnrichmentSuggestions />
         </TabsContent>
 
         <TabsContent value="upload">

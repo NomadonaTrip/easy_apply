@@ -4,7 +4,7 @@ from collections.abc import AsyncGenerator
 
 from sqlmodel import SQLModel
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy import event
+from sqlalchemy import event, text
 
 from app.config import settings, DATA_DIR
 
@@ -98,6 +98,34 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
+def _ensure_columns(conn, table_name: str, columns: list[tuple[str, str]]):
+    """Add columns to existing table if they don't exist.
+
+    Uses PRAGMA table_info + ALTER TABLE for schema evolution without migrations.
+    Called from run_sync — must be synchronous.
+
+    Args:
+        conn: Sync connection from run_sync callback
+        table_name: Name of the table to modify
+        columns: List of (column_name, column_definition) tuples
+    """
+    result = conn.execute(text(f"PRAGMA table_info({table_name})"))
+    existing = {row[1] for row in result.fetchall()}
+    for col_name, col_def in columns:
+        if col_name not in existing:
+            conn.execute(text(
+                f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_def}"
+            ))
+
+
+def _ensure_new_columns(conn):
+    """Callback for run_sync: add new columns to existing tables."""
+    _ensure_columns(conn, "applications", [
+        ("resume_approved", "BOOLEAN NOT NULL DEFAULT 0"),
+        ("cover_letter_approved", "BOOLEAN NOT NULL DEFAULT 0"),
+    ])
+
+
 async def init_db():
     """Initialize database tables."""
     # Import models here to ensure they're registered with SQLModel metadata
@@ -108,5 +136,7 @@ async def init_db():
     from app.models.resume import Resume  # noqa: F401
     from app.models.llm_call_log import LLMCallLog  # noqa: F401
     from app.models.keyword_pattern import KeywordPattern  # noqa: F401
+    from app.models.enrichment import EnrichmentCandidate  # noqa: F401
     async with _engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
+        await conn.run_sync(_ensure_new_columns)

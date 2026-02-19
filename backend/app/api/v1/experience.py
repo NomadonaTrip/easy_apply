@@ -1,6 +1,9 @@
 """Experience API endpoints with role scoping."""
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 
 from app.api.deps import get_current_role
 from app.models.role import Role
@@ -12,7 +15,8 @@ from app.models.experience import (
     AccomplishmentRead,
     AccomplishmentUpdate,
 )
-from app.services import experience_service
+from app.models.enrichment import EnrichmentCandidateRead
+from app.services import experience_service, enrichment_service, application_service
 
 
 router = APIRouter(prefix="/experience", tags=["experience"])
@@ -204,3 +208,99 @@ async def update_accomplishment(
             detail="Accomplishment not found"
         )
     return AccomplishmentRead.model_validate(accomplishment)
+
+
+# Enrichment endpoints
+
+
+class BulkResolveRequest(BaseModel):
+    """Request body for bulk accept/dismiss."""
+    candidate_ids: list[int]
+    action: Literal["accept", "dismiss"]
+
+
+@router.get("/enrichment")
+async def get_enrichment_candidates(
+    current_role: Role = Depends(get_current_role),
+):
+    """Get all pending enrichment candidates for the current role, grouped by application."""
+    candidates = await enrichment_service.get_pending_candidates(current_role.id)
+
+    # Group by application_id
+    by_app: dict[int, list[dict]] = {}
+    for c in candidates:
+        if c.application_id not in by_app:
+            by_app[c.application_id] = []
+        by_app[c.application_id].append(
+            EnrichmentCandidateRead.model_validate(c).model_dump()
+        )
+
+    # Batch-fetch application metadata (avoids N+1 queries)
+    app_ids = list(by_app.keys())
+    apps = await application_service.get_applications_by_ids(app_ids, current_role.id)
+    app_lookup = {a.id: a for a in apps}
+
+    grouped: dict[str, dict] = {}
+    for app_id, app_candidates in by_app.items():
+        app = app_lookup.get(app_id)
+        company_name = app.company_name if app else f"Application #{app_id}"
+        grouped[str(app_id)] = {
+            "company_name": company_name,
+            "candidates": app_candidates,
+        }
+
+    return {
+        "candidates": grouped,
+        "total_pending": len(candidates),
+    }
+
+
+@router.get("/enrichment/stats")
+async def get_enrichment_stats(
+    current_role: Role = Depends(get_current_role),
+):
+    """Get count of pending enrichment candidates."""
+    count = await enrichment_service.get_pending_count(current_role.id)
+    return {"pending_count": count}
+
+
+@router.post("/enrichment/{candidate_id}/accept")
+async def accept_enrichment_candidate(
+    candidate_id: int,
+    current_role: Role = Depends(get_current_role),
+):
+    """Accept an enrichment candidate — adds it to the experience database."""
+    success = await enrichment_service.accept_candidate(candidate_id, current_role.id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Candidate not found or already resolved",
+        )
+    return {"status": "accepted", "candidate_id": candidate_id}
+
+
+@router.post("/enrichment/{candidate_id}/dismiss")
+async def dismiss_enrichment_candidate(
+    candidate_id: int,
+    current_role: Role = Depends(get_current_role),
+):
+    """Dismiss an enrichment candidate — removes it from suggestions."""
+    success = await enrichment_service.dismiss_candidate(candidate_id, current_role.id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Candidate not found or already resolved",
+        )
+    return {"status": "dismissed", "candidate_id": candidate_id}
+
+
+@router.post("/enrichment/bulk")
+async def bulk_resolve_enrichment(
+    data: BulkResolveRequest,
+    current_role: Role = Depends(get_current_role),
+):
+    """Bulk accept or dismiss enrichment candidates."""
+    result = await enrichment_service.bulk_resolve(
+        data.candidate_ids, current_role.id, data.action
+    )
+    return result

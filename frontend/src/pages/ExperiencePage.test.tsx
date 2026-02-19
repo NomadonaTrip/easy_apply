@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ExperiencePage } from './ExperiencePage';
 
@@ -11,6 +11,7 @@ vi.mock('@/stores/roleStore', () => ({
 // Mock the hooks
 vi.mock('@/hooks/useExperience', () => ({
   useExperienceStats: vi.fn(),
+  useEnrichmentStats: vi.fn(),
   useSkills: vi.fn(),
   useAccomplishments: vi.fn(),
 }));
@@ -23,10 +24,11 @@ vi.mock('@/components/resumes', () => ({
 vi.mock('@/components/experience', () => ({
   SkillsList: () => <div data-testid="skills-list">SkillsList</div>,
   AccomplishmentsList: () => <div data-testid="accomplishments-list">AccomplishmentsList</div>,
+  EnrichmentSuggestions: () => <div data-testid="enrichment-suggestions">EnrichmentSuggestions</div>,
 }));
 
 import { useRoleStore } from '@/stores/roleStore';
-import { useExperienceStats } from '@/hooks/useExperience';
+import { useExperienceStats, useEnrichmentStats } from '@/hooks/useExperience';
 
 describe('ExperiencePage', () => {
   let queryClient: QueryClient;
@@ -60,6 +62,12 @@ describe('ExperiencePage', () => {
         queries: { retry: false },
       },
     });
+    // Default enrichment stats mock
+    vi.mocked(useEnrichmentStats).mockReturnValue({
+      data: { pending_count: 0 },
+      isLoading: false,
+      error: null,
+    } as ReturnType<typeof useEnrichmentStats>);
   });
 
   it('should show message when no role is selected', () => {
@@ -103,7 +111,7 @@ describe('ExperiencePage', () => {
     expect(screen.getByText('8')).toBeInTheDocument();
   });
 
-  it('should render tabs for Skills, Accomplishments, and Upload', () => {
+  it('should render tabs for Skills, Accomplishments, Suggestions, and Upload', () => {
     vi.mocked(useRoleStore).mockReturnValue(mockRole);
     vi.mocked(useExperienceStats).mockReturnValue({
       data: mockStats,
@@ -115,6 +123,7 @@ describe('ExperiencePage', () => {
 
     expect(screen.getByRole('tab', { name: /skills/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /accomplishments/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /suggestions/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /upload resumes/i })).toBeInTheDocument();
   });
 
@@ -144,5 +153,68 @@ describe('ExperiencePage', () => {
     // Stats values should not be present
     expect(screen.queryByText('15')).not.toBeInTheDocument();
     expect(screen.queryByText('8')).not.toBeInTheDocument();
+  });
+
+  it('should show notification badge on Suggestions tab when pending candidates > 0', () => {
+    vi.mocked(useRoleStore).mockReturnValue(mockRole);
+    vi.mocked(useExperienceStats).mockReturnValue({
+      data: mockStats,
+      isLoading: false,
+      error: null,
+    } as ReturnType<typeof useExperienceStats>);
+    vi.mocked(useEnrichmentStats).mockReturnValue({
+      data: { pending_count: 5 },
+      isLoading: false,
+      error: null,
+    } as ReturnType<typeof useEnrichmentStats>);
+
+    render(<ExperiencePage />, { wrapper });
+
+    // The badge should show the count
+    expect(screen.getByText('5')).toBeInTheDocument();
+  });
+
+  it('should auto-select Suggestions tab when pending candidates exist', async () => {
+    vi.mocked(useRoleStore).mockReturnValue(mockRole);
+    vi.mocked(useExperienceStats).mockReturnValue({
+      data: mockStats,
+      isLoading: false,
+      error: null,
+    } as ReturnType<typeof useExperienceStats>);
+    vi.mocked(useEnrichmentStats).mockReturnValue({
+      data: { pending_count: 3 },
+      isLoading: false,
+      error: null,
+    } as ReturnType<typeof useEnrichmentStats>);
+
+    render(<ExperiencePage />, { wrapper });
+
+    // Controlled tabs with useEffect — wait for state update
+    await waitFor(() => {
+      const suggestionsTab = screen.getByRole('tab', { name: /suggestions/i });
+      expect(suggestionsTab).toHaveAttribute('aria-selected', 'true');
+    });
+
+    // EnrichmentSuggestions component should be visible
+    expect(screen.getByTestId('enrichment-suggestions')).toBeInTheDocument();
+  });
+
+  it('should default to skills tab when no pending suggestions', () => {
+    vi.mocked(useRoleStore).mockReturnValue(mockRole);
+    vi.mocked(useExperienceStats).mockReturnValue({
+      data: mockStats,
+      isLoading: false,
+      error: null,
+    } as ReturnType<typeof useExperienceStats>);
+    vi.mocked(useEnrichmentStats).mockReturnValue({
+      data: { pending_count: 0 },
+      isLoading: false,
+      error: null,
+    } as ReturnType<typeof useEnrichmentStats>);
+
+    render(<ExperiencePage />, { wrapper });
+
+    const skillsTab = screen.getByRole('tab', { name: /skills/i });
+    expect(skillsTab).toHaveAttribute('aria-selected', 'true');
   });
 });

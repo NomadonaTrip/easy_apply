@@ -1,7 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAccomplishments } from '@/hooks/useExperience';
-import type { Accomplishment } from '@/api/experience';
 import { FileText, Briefcase } from 'lucide-react';
 
 export function AccomplishmentsList() {
@@ -40,6 +39,9 @@ export function AccomplishmentsList() {
     if (source === 'application') {
       return 'From application';
     }
+    if (source === 'application-enriched') {
+      return 'Enriched';
+    }
     return null;
   };
 
@@ -47,7 +49,7 @@ export function AccomplishmentsList() {
     if (source === 'resume') {
       return <FileText className="h-4 w-4" />;
     }
-    if (source === 'application') {
+    if (source === 'application' || source === 'application-enriched') {
       return <Briefcase className="h-4 w-4" />;
     }
     return null;
@@ -75,9 +77,18 @@ export function AccomplishmentsList() {
                 </p>
               )}
               {accomplishment.source && (
-                <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
-                  {getSourceIcon(accomplishment.source)}
-                  <span>{getSourceLabel(accomplishment.source)}</span>
+                <div className="flex items-center gap-1.5 mt-2">
+                  {accomplishment.source === 'application-enriched' ? (
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary">
+                      {getSourceIcon(accomplishment.source)}
+                      {getSourceLabel(accomplishment.source)}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                      {getSourceIcon(accomplishment.source)}
+                      {getSourceLabel(accomplishment.source)}
+                    </Badge>
+                  )}
                 </div>
               )}
             </li>

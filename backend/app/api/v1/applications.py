@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from html import escape
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.api.deps import get_current_role
@@ -15,7 +15,7 @@ from app.models.application import (
 )
 from app.models.research import ResearchCategory
 from app.models.keyword import Keyword, KeywordList, KeywordExtractionResponse
-from app.services import application_service
+from app.services import application_service, enrichment_service
 from app.services.keyword_service import extract_keywords, keywords_to_json
 from app.services import learning_service
 
@@ -81,11 +81,34 @@ async def get_application(
 async def update_application(
     id: int,
     data: ApplicationUpdate,
+    background_tasks: BackgroundTasks,
     role: Role = Depends(get_current_role),
 ):
+    # Check current state before update to detect approval transitions
+    current = await application_service.get_application(id, role.id)
+    if not current:
+        raise HTTPException(status_code=404, detail="Application not found")
+
     application = await application_service.update_application(id, role.id, data)
     if not application:
         raise HTTPException(status_code=404, detail="Application not found")
+
+    # Trigger enrichment as background task on document approval
+    if data.resume_approved is True and not current.resume_approved:
+        background_tasks.add_task(
+            enrichment_service.analyze_document_for_enrichment,
+            application_id=id,
+            role_id=role.id,
+            document_type="resume",
+        )
+    if data.cover_letter_approved is True and not current.cover_letter_approved:
+        background_tasks.add_task(
+            enrichment_service.analyze_document_for_enrichment,
+            application_id=id,
+            role_id=role.id,
+            document_type="cover_letter",
+        )
+
     return application
 
 
@@ -387,4 +410,57 @@ async def approve_research(
         approved_at=updated.updated_at.isoformat(),
         research_summary=_get_research_summary(updated),
         message="Research approved. Ready for document generation.",
+    )
+
+
+class EnrichmentTriggerResponse(BaseModel):
+    """Response from enrichment trigger."""
+    application_id: int
+    resume_result: Optional[dict] = None
+    cover_letter_result: Optional[dict] = None
+    message: str
+
+
+@router.post("/{id}/enrich", response_model=EnrichmentTriggerResponse)
+async def trigger_enrichment(
+    id: int,
+    role: Role = Depends(get_current_role),
+):
+    """Trigger or retry enrichment analysis for an application.
+
+    Analyzes both resume and cover letter content (if available) for
+    new skills and accomplishments not already in the experience database.
+    """
+    application = await application_service.get_application(id, role.id)
+    if not application:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    resume_result = None
+    cover_letter_result = None
+
+    if application.resume_content and application.resume_approved:
+        resume_result = await enrichment_service.analyze_document_for_enrichment(
+            id, role.id, "resume"
+        )
+
+    if application.cover_letter_content and application.cover_letter_approved:
+        cover_letter_result = await enrichment_service.analyze_document_for_enrichment(
+            id, role.id, "cover_letter"
+        )
+
+    total = (
+        (resume_result.get("candidates_found", 0) if resume_result else 0)
+        + (cover_letter_result.get("candidates_found", 0) if cover_letter_result else 0)
+    )
+
+    if not resume_result and not cover_letter_result:
+        message = "No approved documents found. Approve a resume or cover letter first."
+    else:
+        message = f"Enrichment analysis complete. {total} new candidates found."
+
+    return EnrichmentTriggerResponse(
+        application_id=id,
+        resume_result=resume_result,
+        cover_letter_result=cover_letter_result,
+        message=message,
     )

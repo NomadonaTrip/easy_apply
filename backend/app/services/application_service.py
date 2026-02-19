@@ -128,3 +128,25 @@ async def update_manual_context(
         await session.refresh(application)
         session.expunge(application)
         return application
+
+
+async def get_applications_by_ids(
+    ids: list[int], role_id: int
+) -> list[Application]:
+    """Batch fetch applications by IDs with role ownership check."""
+    if role_id is None:
+        raise ValueError("role_id is required - data isolation violation")
+    if not ids:
+        return []
+
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(Application).where(
+                Application.id.in_(ids),
+                Application.role_id == role_id,
+            )
+        )
+        applications = result.scalars().all()
+        for app in applications:
+            session.expunge(app)
+        return list(applications)

@@ -69,9 +69,21 @@ export function SkillsList() {
             </h4>
             <div className="flex flex-wrap gap-2">
               {skillsByCategory[category].map((skill) => (
-                <Badge key={skill.id} variant="outline">
-                  {skill.name}
-                </Badge>
+                <div key={skill.id} className="inline-flex items-center gap-1">
+                  <Badge variant="outline">
+                    {skill.name}
+                  </Badge>
+                  {skill.source === 'resume' && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                      Resume
+                    </Badge>
+                  )}
+                  {skill.source === 'application-enriched' && (
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary">
+                      Enriched
+                    </Badge>
+                  )}
+                </div>
               ))}
             </div>
           </div>

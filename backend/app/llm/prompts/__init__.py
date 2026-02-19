@@ -55,6 +55,7 @@ from .scrape import JOB_DESCRIPTION_EXTRACTION_PROMPT  # noqa: E402, F401
 from . import research  # noqa: E402, F401
 from . import resume  # noqa: E402, F401
 from . import cover_letter  # noqa: E402, F401
+from . import enrichment  # noqa: E402, F401
 
 __all__ = [
     "PromptRegistry",

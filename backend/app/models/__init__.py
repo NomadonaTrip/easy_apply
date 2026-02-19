@@ -15,6 +15,9 @@ from app.models.keyword import (
 )
 from app.models.llm_call_log import LLMCallLog, CallRecord
 from app.models.keyword_pattern import KeywordPattern, KeywordPatternRead
+from app.models.enrichment import (
+    EnrichmentCandidate, EnrichmentCandidateRead,
+)
 from app.models.research import (
     ResearchStatus, ResearchCategory, ResearchSourceResult,
     ResearchProgressEvent, ResearchCompleteEvent, ResearchErrorEvent,
@@ -31,6 +34,7 @@ __all__ = [
     "Keyword", "KeywordList", "KeywordCategory", "KeywordExtractionResponse",
     "LLMCallLog", "CallRecord",
     "KeywordPattern", "KeywordPatternRead",
+    "EnrichmentCandidate", "EnrichmentCandidateRead",
     "ResearchStatus", "ResearchCategory", "ResearchSourceResult",
     "ResearchProgressEvent", "ResearchCompleteEvent", "ResearchErrorEvent",
     "ResearchResult",
