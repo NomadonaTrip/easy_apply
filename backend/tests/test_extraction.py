@@ -314,6 +314,92 @@ class TestExtractionService:
             assert updated_resume.processed is True
 
     @pytest.mark.asyncio
+    async def test_extract_from_resume_stores_structured_fields(self, user_and_role, tmp_path, monkeypatch):
+        """Structured company_name, role_title, dates are stored when present."""
+        from app.services.extraction_service import extract_from_resume
+        from app.services import resume_service, experience_service
+
+        role_id = user_and_role
+
+        upload_dir = tmp_path / "uploads"
+        upload_dir.mkdir(parents=True)
+        monkeypatch.setattr("app.utils.file_storage.UPLOAD_DIR", upload_dir)
+
+        resume = await resume_service.create_resume(
+            role_id=role_id,
+            filename="structured.pdf",
+            file_type="pdf",
+            file_path="uploads/1/structured.pdf",
+            file_size=1024
+        )
+
+        with patch('app.services.extraction_service.extract_text') as mock_extract, \
+             patch('app.services.extraction_service.extract_skills_with_llm') as mock_skills, \
+             patch('app.services.extraction_service.extract_accomplishments_with_llm') as mock_acc:
+
+            mock_extract.return_value = "Jane Doe, Senior Engineer at TechCorp"
+            mock_skills.return_value = []
+            mock_acc.return_value = [
+                {
+                    "description": "Led API migration reducing latency by 40%",
+                    "context": "Senior Engineer at TechCorp",
+                    "company_name": "TechCorp",
+                    "role_title": "Senior Engineer",
+                    "dates": "2020-2024",
+                }
+            ]
+
+            await extract_from_resume(resume.id, role_id)
+
+        accomplishments = await experience_service.get_accomplishments(role_id)
+        assert len(accomplishments) == 1
+        acc = accomplishments[0]
+        assert acc.company_name == "TechCorp"
+        assert acc.role_title == "Senior Engineer"
+        assert acc.dates == "2020-2024"
+        assert acc.context == "Senior Engineer at TechCorp"
+
+    @pytest.mark.asyncio
+    async def test_extract_from_resume_handles_missing_structured_fields(self, user_and_role, tmp_path, monkeypatch):
+        """Accomplishments without structured fields store None (backward compat)."""
+        from app.services.extraction_service import extract_from_resume
+        from app.services import resume_service, experience_service
+
+        role_id = user_and_role
+
+        upload_dir = tmp_path / "uploads"
+        upload_dir.mkdir(parents=True)
+        monkeypatch.setattr("app.utils.file_storage.UPLOAD_DIR", upload_dir)
+
+        resume = await resume_service.create_resume(
+            role_id=role_id,
+            filename="legacy.pdf",
+            file_type="pdf",
+            file_path="uploads/1/legacy.pdf",
+            file_size=1024
+        )
+
+        with patch('app.services.extraction_service.extract_text') as mock_extract, \
+             patch('app.services.extraction_service.extract_skills_with_llm') as mock_skills, \
+             patch('app.services.extraction_service.extract_accomplishments_with_llm') as mock_acc:
+
+            mock_extract.return_value = "John Doe, Software Engineer"
+            mock_skills.return_value = []
+            mock_acc.return_value = [
+                {"description": "Built scalable API", "context": "Lead Engineer"}
+            ]
+
+            await extract_from_resume(resume.id, role_id)
+
+        accomplishments = await experience_service.get_accomplishments(role_id)
+        assert len(accomplishments) == 1
+        acc = accomplishments[0]
+        assert acc.company_name is None
+        assert acc.role_title is None
+        assert acc.dates is None
+        assert acc.context == "Lead Engineer"
+
+    @pytest.mark.asyncio
     async def test_extract_from_resume_not_found(self, user_and_role):
         """Test extraction fails gracefully for non-existent resume."""
         from app.services.extraction_service import extract_from_resume

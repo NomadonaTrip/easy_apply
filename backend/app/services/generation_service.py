@@ -12,14 +12,137 @@ from app.llm.types import GenerationConfig, Role
 from app.models.application import Application, ApplicationUpdate, GenerationStatus
 from app.models.research import ResearchResult
 from app.services import application_service, experience_service, resume_service
+from app.services.extraction_service import enrich_skills_from_keywords
 from app.utils.document_parser import extract_text
 from app.utils.llm_helpers import build_research_context, generate_with_retry
-from app.utils.text_processing import enforce_output_constraints
+from app.utils.text_processing import check_keyword_coverage, enforce_output_constraints, keyword_found
 
 logger = logging.getLogger(__name__)
 
 # Skill categories that represent certifications/qualifications
 _CERTIFICATION_CATEGORIES = {"certification", "certifications", "qualification", "qualifications"}
+
+# Priority tier boundaries
+_MUST_HAVE_MIN = 8
+_IMPORTANT_MIN = 5
+
+
+def _parse_keywords_raw(application: Application) -> list[dict]:
+    """Parse keywords_raw from application JSON field.
+
+    Shared by enrichment (pre-context) and build_generation_context.
+    """
+    keywords_list = json.loads(application.keywords) if application.keywords else []
+    keywords_raw: list[dict] = []
+    if isinstance(keywords_list, list) and keywords_list:
+        for kw in keywords_list:
+            if isinstance(kw, dict):
+                keywords_raw.append(kw)
+            else:
+                keywords_raw.append({"text": str(kw), "priority": 5, "category": "general", "pattern_boosted": False})
+    return keywords_raw
+
+
+def _format_keywords_tiered(keywords_raw: list[dict]) -> str:
+    """Format keywords into priority-tiered sections for the prompt.
+
+    Groups keywords into MUST-HAVE (8-10), IMPORTANT (5-7), NICE-TO-HAVE (1-4)
+    with category and pattern_boosted metadata visible to the LLM.
+    """
+    must_have = []
+    important = []
+    nice_to_have = []
+
+    for kw in keywords_raw:
+        priority = kw.get("priority", 5)
+        if priority >= _MUST_HAVE_MIN:
+            must_have.append(kw)
+        elif priority >= _IMPORTANT_MIN:
+            important.append(kw)
+        else:
+            nice_to_have.append(kw)
+
+    # Sort each tier by descending priority
+    must_have.sort(key=lambda k: k.get("priority", 0), reverse=True)
+    important.sort(key=lambda k: k.get("priority", 0), reverse=True)
+    nice_to_have.sort(key=lambda k: k.get("priority", 0), reverse=True)
+
+    lines: list[str] = []
+    counter = 1
+
+    if must_have:
+        lines.append("## MUST-HAVE Keywords (Priority 8-10) - These MUST appear in the output:")
+        for kw in must_have:
+            boosted = " *" if kw.get("pattern_boosted") else ""
+            lines.append(f"  {counter}. {kw['text']} [{kw.get('category', 'general')}, priority: {kw.get('priority', 5)}]{boosted}")
+            counter += 1
+        lines.append("")
+
+    if important:
+        lines.append("## IMPORTANT Keywords (Priority 5-7) - Include where naturally fitting:")
+        for kw in important:
+            boosted = " *" if kw.get("pattern_boosted") else ""
+            lines.append(f"  {counter}. {kw['text']} [{kw.get('category', 'general')}, priority: {kw.get('priority', 5)}]{boosted}")
+            counter += 1
+        lines.append("")
+
+    if nice_to_have:
+        lines.append("## NICE-TO-HAVE Keywords (Priority 1-4) - Include if space allows:")
+        for kw in nice_to_have:
+            boosted = " *" if kw.get("pattern_boosted") else ""
+            lines.append(f"  {counter}. {kw['text']} [{kw.get('category', 'general')}, priority: {kw.get('priority', 5)}]{boosted}")
+            counter += 1
+        lines.append("")
+
+    if any(kw.get("pattern_boosted") for kw in keywords_raw):
+        lines.append("* = pattern-boosted (historically successful for this role type)")
+
+    return "\n".join(lines) if lines else "No keywords specified"
+
+
+def _annotate_accomplishments(accomplishments_text: str, keywords_raw: list[dict]) -> str:
+    """Annotate accomplishment group headings with relevant high-priority keywords.
+
+    Scans the bullet points under each ### heading for mentions of priority 7+
+    keywords and appends a [Relevant to: ...] tag to the heading.
+    """
+    high_priority_kws = [
+        kw["text"] for kw in keywords_raw
+        if kw.get("priority", 0) >= 7
+    ]
+    if not high_priority_kws:
+        return accomplishments_text
+
+    lines = accomplishments_text.split("\n")
+    result: list[str] = []
+    i = 0
+
+    while i < len(lines):
+        line = lines[i]
+        if line.startswith("### "):
+            # Collect all bullet lines under this heading
+            heading = line
+            bullets: list[str] = []
+            j = i + 1
+            while j < len(lines) and not lines[j].startswith("### "):
+                bullets.append(lines[j])
+                j += 1
+
+            # Check which high-priority keywords appear in the bullets
+            bullets_lower = " ".join(bullets).lower()
+            matched = [kw for kw in high_priority_kws if keyword_found(kw, bullets_lower)]
+
+            if matched:
+                heading = f"{heading} [Relevant to: {', '.join(matched)}]"
+
+            result.append(heading)
+            result.extend(bullets)
+            i = j
+        else:
+            result.append(line)
+            i += 1
+
+    return "\n".join(result)
 
 
 async def _get_candidate_header(role_id: int) -> str:
@@ -38,7 +161,7 @@ async def _get_candidate_header(role_id: int) -> str:
         text = extract_text(latest.file_path, latest.file_type)
         # Return header section (name + contact typically in first ~500 chars)
         return text[:500].strip() if text else ""
-    except Exception as e:
+    except (FileNotFoundError, ValueError, OSError, IndexError) as e:
         logger.warning("Failed to extract candidate header: %s", e)
         return ""
 
@@ -57,6 +180,11 @@ async def build_generation_context(
     # Get experience data
     skills = await experience_service.get_skills(role_id)
     accomplishments = await experience_service.get_accomplishments(role_id)
+
+    if not skills:
+        logger.warning("No skills found for role %d — skills section will be empty", role_id)
+    if not accomplishments:
+        logger.warning("No accomplishments found for role %d — experience section will be empty", role_id)
 
     # Separate certifications from skills
     cert_skills = []
@@ -78,17 +206,37 @@ async def build_generation_context(
         f"- {s.name}" for s in cert_skills
     ) or "None listed"
 
-    # Format accomplishments grouped by role/context
-    role_groups: dict[str, list[str]] = defaultdict(list)
+    # Format accomplishments grouped by company+dates (or fall back to context)
+    company_groups: dict[str, dict] = {}
     for a in accomplishments:
-        role_key = a.context or "Other"
-        role_groups[role_key].append(a.description)
+        if a.company_name:
+            key = f"{a.company_name}|{a.dates or ''}"
+        else:
+            key = a.context or "Other"
 
-    if role_groups:
+        if key not in company_groups:
+            company_groups[key] = {
+                "titles": set(),
+                "descs": [],
+                "company": a.company_name,
+                "dates": a.dates,
+            }
+
+        if a.role_title:
+            company_groups[key]["titles"].add(a.role_title)
+        company_groups[key]["descs"].append(a.description)
+
+    if company_groups:
         parts = []
-        for role_context, descs in role_groups.items():
-            parts.append(f"### {role_context}")
-            for desc in descs:
+        for key, group in company_groups.items():
+            if group["company"] and group["titles"]:
+                titles_str = " / ".join(sorted(group["titles"]))
+                dates_str = f" | {group['dates']}" if group["dates"] else ""
+                heading = f"{titles_str} | {group['company']}{dates_str}"
+            else:
+                heading = key  # legacy fallback: use context string
+            parts.append(f"### {heading}")
+            for desc in group["descs"]:
                 parts.append(f"- {desc}")
             parts.append("")  # blank line between groups
         accomplishments_text = "\n".join(parts)
@@ -98,15 +246,9 @@ async def build_generation_context(
     # Get candidate identity from resume header
     candidate_header = await _get_candidate_header(role_id)
 
-    # Parse keywords from JSON
-    keywords_list = json.loads(application.keywords) if application.keywords else []
-    if isinstance(keywords_list, list) and keywords_list:
-        keywords_text = "\n".join(
-            f"{i+1}. {kw['text']}" if isinstance(kw, dict) else f"{i+1}. {kw}"
-            for i, kw in enumerate(keywords_list)
-        )
-    else:
-        keywords_text = "No keywords specified"
+    # Parse keywords from JSON — preserve full metadata for coverage check
+    keywords_raw = _parse_keywords_raw(application)
+    keywords_text = _format_keywords_tiered(keywords_raw) if keywords_raw else "No keywords specified"
 
     # Build research context using build_research_context()
     research_context = "No research data available."
@@ -122,8 +264,19 @@ async def build_generation_context(
         except (json.JSONDecodeError, Exception) as e:
             logger.warning("Failed to parse research data: %s", e)
 
+    # Annotate accomplishment headings with keyword relevance
+    if keywords_raw:
+        accomplishments_text = _annotate_accomplishments(accomplishments_text, keywords_raw)
+
     # Manual context
     manual_context = application.manual_context or "No additional context provided."
+
+    logger.info(
+        "Generation context built for role %d: %d skills, %d certs, %d accomplishments, "
+        "%d keywords, candidate_header=%d chars",
+        role_id, len(regular_skills), len(cert_skills), len(accomplishments),
+        len(keywords_raw), len(candidate_header),
+    )
 
     return {
         "skills": skills_text,
@@ -137,6 +290,7 @@ async def build_generation_context(
         "gap_categories": gap_categories,
         "manual_context": manual_context,
         "keywords": keywords_text,
+        "keywords_raw": keywords_raw,
     }
 
 
@@ -158,7 +312,22 @@ async def generate_resume(
 
     context = None
     try:
-        # Build context
+        # Enrich skills library BEFORE building context so enriched skills
+        # appear in the current generation's prompt
+        try:
+            keywords_raw = _parse_keywords_raw(application)
+            if keywords_raw:
+                skills = await experience_service.get_skills(role_id)
+                accomplishments = await experience_service.get_accomplishments(role_id)
+                added = await enrich_skills_from_keywords(
+                    role_id, keywords_raw, accomplishments, skills
+                )
+                if added:
+                    logger.info("Enriched skills library with %d keyword(s) for role %d", added, role_id)
+        except Exception:
+            pass  # enrichment is best-effort, never blocks generation
+
+        # Build context (now includes any enriched skills)
         context = await build_generation_context(application, role_id)
 
         # Get prompts from registry
@@ -181,6 +350,12 @@ async def generate_resume(
         ]
         response = await generate_with_retry(provider, messages, config)
         resume_content = enforce_output_constraints(response.content)
+
+        # Keyword coverage observability (fire-and-forget, never blocks)
+        try:
+            check_keyword_coverage(resume_content, context.get("keywords_raw", []))
+        except Exception:
+            pass  # observability must never break generation
 
         # Save content and update status
         await _save_generation_result(
@@ -236,7 +411,22 @@ async def generate_cover_letter(
 
     context = None
     try:
-        # Build context
+        # Enrich skills library BEFORE building context so enriched skills
+        # appear in the current generation's prompt
+        try:
+            keywords_raw = _parse_keywords_raw(application)
+            if keywords_raw:
+                skills = await experience_service.get_skills(role_id)
+                accomplishments = await experience_service.get_accomplishments(role_id)
+                added = await enrich_skills_from_keywords(
+                    role_id, keywords_raw, accomplishments, skills
+                )
+                if added:
+                    logger.info("Enriched skills library with %d keyword(s) for role %d", added, role_id)
+        except Exception:
+            pass  # enrichment is best-effort, never blocks generation
+
+        # Build context (now includes any enriched skills)
         context = await build_generation_context(application, role_id)
         context["tone"] = tone
 
@@ -246,6 +436,12 @@ async def generate_cover_letter(
 
         # Generate (uses LLM_MODEL_GEN override if set)
         provider = get_llm_provider_for_generation()
+
+        # Load cover-letter-writing skill if available
+        if SkillLoader.skill_exists("cover_letter_writing"):
+            skill_content = SkillLoader.load("cover_letter_writing")
+            provider.set_system_instruction(skill_content)
+
         config = GenerationConfig(prompt_name="generation_cover_letter")
         messages = [
             Message(role=Role.SYSTEM, content=system_prompt),
@@ -253,6 +449,12 @@ async def generate_cover_letter(
         ]
         response = await generate_with_retry(provider, messages, config)
         cover_letter_content = enforce_output_constraints(response.content)
+
+        # Keyword coverage observability (fire-and-forget, never blocks)
+        try:
+            check_keyword_coverage(cover_letter_content, context.get("keywords_raw", []))
+        except Exception:
+            pass  # observability must never break generation
 
         # Save
         await _save_generation_result(

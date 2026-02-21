@@ -4,7 +4,7 @@ from collections.abc import AsyncGenerator
 
 from sqlmodel import SQLModel
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy import event
+from sqlalchemy import event, text
 
 from app.config import settings, DATA_DIR
 
@@ -98,6 +98,21 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
+async def _ensure_columns(conn, table: str, columns: list[tuple[str, str]]):
+    """Add missing columns to an existing table (SQLite ALTER TABLE).
+
+    Checks PRAGMA table_info for existing columns and adds any that are missing.
+    Safe to call repeatedly — skips columns that already exist.
+    """
+    result = await conn.execute(text(f"PRAGMA table_info({table})"))
+    existing = {row[1] for row in result}
+    for col_name, col_type in columns:
+        if col_name not in existing:
+            await conn.execute(
+                text(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_type}")
+            )
+
+
 async def init_db():
     """Initialize database tables."""
     # Import models here to ensure they're registered with SQLModel metadata
@@ -110,3 +125,10 @@ async def init_db():
     from app.models.keyword_pattern import KeywordPattern  # noqa: F401
     async with _engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
+
+        # Add columns introduced after initial schema creation
+        await _ensure_columns(conn, "accomplishments", [
+            ("company_name", "TEXT"),
+            ("role_title", "TEXT"),
+            ("dates", "TEXT"),
+        ])

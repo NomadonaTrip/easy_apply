@@ -12,6 +12,8 @@ Usage in tests:
 
 import re
 
+from app.utils.text_processing import keyword_found
+
 
 # ============================================================================
 # Forbidden characters and phrases
@@ -140,6 +142,32 @@ def validate_resume_structure(content: str) -> list[str]:
                 "Experience section missing bullet points"
             )
 
+        # Role heading uniqueness within Experience section
+        role_headings = re.findall(r"###\s+(.+)", exp_section)
+        seen: dict[str, int] = {}
+        for heading in role_headings:
+            normalized = heading.strip().lower()
+            seen[normalized] = seen.get(normalized, 0) + 1
+        for heading, count in seen.items():
+            if count > 1:
+                violations.append(f"Duplicate role heading ({count}x): '{heading}'")
+
+        # Company-level uniqueness (catches same company with different titles)
+        companies_seen: dict[str, int] = {}
+        for heading in role_headings:
+            parts = [p.strip() for p in heading.split("|")]
+            if len(parts) >= 2:
+                company_key = parts[1].strip().lower()
+                # Include dates if present (same company at different periods is OK)
+                if len(parts) >= 3:
+                    company_key += "|" + parts[2].strip().lower()
+                companies_seen[company_key] = companies_seen.get(company_key, 0) + 1
+        for company, count in companies_seen.items():
+            if count > 1:
+                violations.append(
+                    f"Same company appears {count}x in Experience: '{company}'"
+                )
+
     return violations
 
 
@@ -204,11 +232,11 @@ def validate_resume_keywords(
     if not top_keywords:
         return violations
 
-    matched = [kw for kw in top_keywords if kw.lower() in content_lower]
+    matched = [kw for kw in top_keywords if keyword_found(kw, content_lower)]
     density = len(matched) / len(top_keywords)
 
     if density < min_density:
-        missing = [kw for kw in top_keywords if kw.lower() not in content_lower]
+        missing = [kw for kw in top_keywords if not keyword_found(kw, content_lower)]
         violations.append(
             f"Keyword density {density:.0%} below minimum {min_density:.0%}. "
             f"Missing: {', '.join(missing)}"
@@ -270,6 +298,13 @@ def validate_cover_letter_structure(content: str) -> list[str]:
     # Closing
     if "sincerely" not in content.lower():
         violations.append("Missing closing (should contain 'Sincerely')")
+
+    # Placeholder signature check
+    placeholders = ["[Name]", "[Your Name]", "[Candidate Name]"]
+    content_lower = content.lower()
+    for p in placeholders:
+        if p.lower() in content_lower:
+            violations.append(f"Signature contains placeholder: '{p}'")
 
     # Paragraph count: split by blank lines, filter empty
     paragraphs = [

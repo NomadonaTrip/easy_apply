@@ -10,6 +10,7 @@ from google.genai.errors import ClientError
 from app.services import resume_service, experience_service
 from app.utils.document_parser import extract_text
 from app.utils.llm_helpers import extract_json_from_response, generate_with_retry
+from app.utils.text_processing import keyword_found
 from app.llm.prompts.extraction import (
     SKILL_EXTRACTION_PROMPT,
     ACCOMPLISHMENT_EXTRACTION_PROMPT,
@@ -132,6 +133,9 @@ async def add_accomplishment_if_not_exists(
     role_id: int,
     description: str,
     context: Optional[str] = None,
+    company_name: Optional[str] = None,
+    role_title: Optional[str] = None,
+    dates: Optional[str] = None,
     source: Optional[str] = None
 ) -> bool:
     """
@@ -144,6 +148,9 @@ async def add_accomplishment_if_not_exists(
         role_id: The role ID to add the accomplishment to
         description: The accomplishment description
         context: Optional context (e.g., job title, company)
+        company_name: Optional company name (structured field)
+        role_title: Optional role title (structured field)
+        dates: Optional employment dates (structured field)
         source: Optional source (e.g., "resume")
 
     Returns:
@@ -162,6 +169,9 @@ async def add_accomplishment_if_not_exists(
     acc_data = AccomplishmentCreate(
         description=description.strip(),
         context=context,
+        company_name=company_name,
+        role_title=role_title,
+        dates=dates,
         source=source
     )
     await experience_service.create_accomplishment(role_id, acc_data)
@@ -218,6 +228,9 @@ async def extract_from_resume(resume_id: int, role_id: int) -> dict:
             role_id,
             description=acc_data["description"],
             context=acc_data.get("context"),
+            company_name=acc_data.get("company_name"),
+            role_title=acc_data.get("role_title"),
+            dates=acc_data.get("dates"),
             source="resume"
         )
         if added:
@@ -274,3 +287,53 @@ async def extract_all_unprocessed(role_id: int) -> dict:
         "total_skills": total_skills,
         "total_accomplishments": total_accomplishments
     }
+
+
+async def enrich_skills_from_keywords(
+    role_id: int,
+    keywords_raw: list[dict],
+    accomplishments: list,
+    existing_skills: list,
+) -> int:
+    """Persist JD keyword phrasings as new skills when they fuzzy-match existing experience.
+
+    For each high-priority keyword (priority >= 5), checks if the concept exists
+    in accomplishment descriptions or existing skill names via keyword_found().
+    If a match is found and the keyword isn't already an exact skill duplicate,
+    adds it as a new skill so future generations get exact matches.
+
+    Args:
+        role_id: Role for data isolation.
+        keywords_raw: Keyword dicts with text, priority, category keys.
+        accomplishments: Accomplishment objects with .description attribute.
+        existing_skills: Skill objects with .name attribute.
+
+    Returns:
+        Count of new skills added.
+    """
+    # Build combined text from accomplishment descriptions + existing skill names
+    parts = [a.description for a in accomplishments]
+    parts.extend(s.name for s in existing_skills)
+    combined_text = " ".join(parts).lower()
+
+    added = 0
+    for kw in keywords_raw:
+        priority = kw.get("priority", 0)
+        if priority < 5:
+            continue
+
+        kw_text = kw.get("text", "").strip()
+        if not kw_text:
+            continue
+
+        if keyword_found(kw_text, combined_text):
+            was_added = await add_skill_if_not_exists(
+                role_id,
+                name=kw_text,
+                category=kw.get("category"),
+                source="application",
+            )
+            if was_added:
+                added += 1
+
+    return added

@@ -41,10 +41,11 @@ CRITICAL: Extract the candidate's ACTUAL full name and contact information from 
 
 CRITICAL: ALL certifications listed above MUST appear in the final resume under Education or a dedicated Certifications section. Do not omit any.
 
-### Experience (grouped by role):
+### Experience (grouped by company):
 {accomplishments}
 
-CRITICAL: Each role heading above MUST appear EXACTLY ONCE in the Experience section. Do NOT duplicate or merge roles. Place each accomplishment under its original role heading only.
+CRITICAL: Each company and date range combination MUST appear EXACTLY ONCE in the Experience section. Do NOT duplicate companies. Place each accomplishment under its original company heading only.
+When multiple role titles are listed for the same company (separated by "/"), pick one and adjust its language to best fit the target job description. For example, if the target role is "Backend Engineering Lead" and source titles are "Senior Developer / Lead Engineer", you might use "Lead Backend Engineer". Do NOT list multiple titles -- produce a single, tailored title.
 
 ## TARGET POSITION
 
@@ -66,16 +67,34 @@ CRITICAL: Each role heading above MUST appear EXACTLY ONCE in the Experience sec
 
 ## INSTRUCTIONS
 
+### Identity & Structure
 1. Use the candidate's REAL name and contact info from the Candidate Identity section above
-2. Create a professional resume tailored to this specific position
-3. Preserve the role-accomplishment grouping from the Experience section above - each role appears exactly once
-4. Include ALL certifications from the Certifications section
-5. Emphasize skills and accomplishments that match the keywords (in priority order)
-6. Use the company research to align language and values
-7. Structure with clear sections: Summary, Experience, Skills, Education/Certifications
-8. Be specific and quantify achievements where possible
-9. If research gaps exist (noted above), focus on demonstrated skills and experience rather than company-specific positioning for those areas
-10. If additional context from the applicant is provided, incorporate it naturally
+2. Preserve the company-accomplishment grouping from the Experience section - each company+dates combination appears exactly once
+3. Include ALL certifications from the Certifications section
+4. Structure with clear sections: Summary, Experience, Skills, Education/Certifications
+
+### Keyword Coverage (CRITICAL)
+5. Every MUST-HAVE keyword (priority 8-10) MUST appear at least once in the final resume. Target 100% must-have coverage.
+6. Place technical_skill keywords in BOTH the Skills section AND at least one Experience bullet
+7. Place tool keywords in Skills AND mention in relevant Experience context
+8. Demonstrate soft_skill keywords through action verbs in Experience bullets (e.g., for "leadership" write "Led a team of 8 engineers...")
+9. Place qualification keywords in Education/Certifications or Summary as appropriate
+10. IMPORTANT keywords (priority 5-7) should appear where they naturally fit. Target 80%+ coverage.
+
+### JD Language Mirroring (CRITICAL)
+11. Use the EXACT phrases and terminology from the job posting. If the JD says "microservices architecture", write "microservices architecture" - not "distributed systems". If it says "CI/CD pipelines", write "CI/CD pipelines" - not "continuous integration".
+12. Mirror the JD's phrasing for years of experience, tools, methodologies, and domain terms
+13. Echo the job title language in the Professional Summary
+
+### Accomplishment Prioritization
+14. Lead each company section with accomplishments tagged [Relevant to: ...] - these are the most JD-aligned
+15. Within each company, prioritize JD-relevance over chronological ordering
+16. Be specific and quantify achievements where possible
+
+### Context Integration
+17. Use company research to align language and values
+18. If research gaps exist (noted above), focus on demonstrated skills rather than company-specific positioning for those areas
+19. If additional context from the applicant is provided, incorporate it naturally
 
 ## OUTPUT CONSTRAINTS (CRITICAL)
 
@@ -118,12 +137,13 @@ Generate the resume now:
 """
 
 RESUME_SYSTEM_PROMPT = """You are an expert resume writer. Your resumes are:
-- Tailored specifically to each job posting
-- Keyword-optimized for ATS systems
+- Tailored specifically to each job posting using the EXACT terminology from the job description - never paraphrase key terms
+- Keyword-optimized for ATS systems - every MUST-HAVE keyword appears at least once
 - Free of AI-sounding language
 - Focused on quantifiable achievements
 - Professionally formatted in clean markdown
 - Written in active voice with concrete, specific language
+- Prioritize accomplishments tagged [Relevant to: ...] as they match the JD
 - ALWAYS use the candidate's real name and contact info - never placeholders"""
 
 # Register prompts

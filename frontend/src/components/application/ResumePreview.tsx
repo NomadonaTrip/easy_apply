@@ -13,29 +13,35 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { RefreshCw, FileText, Clock, AlertCircle, Loader2 } from 'lucide-react';
+import { RefreshCw, FileText, Clock, AlertCircle, Loader2, Check } from 'lucide-react';
 
 interface ResumePreviewProps {
   resumeContent: string | null;
-  generationStatus: string;
-  onGenerate: () => void;
-  isGenerating: boolean;
-  error: Error | null;
-  generatedAt: string | null;
+  // Generation mode (optional — omit for review mode)
+  generationStatus?: string;
+  onGenerate?: () => void;
+  isGenerating?: boolean;
+  error?: Error | null;
+  generatedAt?: string | null;
+  // Review mode (optional — omit for generation mode)
+  resumeApproved?: boolean;
 }
 
 export function ResumePreview({
   resumeContent,
   generationStatus,
   onGenerate,
-  isGenerating,
-  error,
-  generatedAt,
+  isGenerating = false,
+  error = null,
+  generatedAt = null,
+  resumeApproved = false,
 }: ResumePreviewProps) {
   const [showConfirm, setShowConfirm] = useState(false);
+  const isReviewMode = !onGenerate;
   const isGeneratingResume = isGenerating || generationStatus === 'generating_resume';
 
   const handleRegenerate = () => {
+    if (!onGenerate) return;
     if (resumeContent) {
       setShowConfirm(true);
     } else {
@@ -44,12 +50,13 @@ export function ResumePreview({
   };
 
   const confirmRegenerate = () => {
+    if (!onGenerate) return;
     setShowConfirm(false);
     onGenerate();
   };
 
-  // Error state
-  if (error) {
+  // Error state (generation mode only)
+  if (!isReviewMode && error) {
     return (
       <Card>
         <CardContent className="p-8">
@@ -70,26 +77,37 @@ export function ResumePreview({
     );
   }
 
-  // No content yet - show generate button
+  // No content yet
   if (!resumeContent && !isGeneratingResume) {
     return (
       <Card>
         <CardContent className="p-8 text-center">
           <FileText className="mx-auto h-12 w-12 text-muted-foreground mb-4" aria-hidden="true" />
-          <h3 className="text-lg font-medium mb-2">No Resume Generated</h3>
-          <p className="text-muted-foreground mb-4">
-            Generate a tailored resume based on your experience and the job requirements.
-          </p>
-          <Button onClick={onGenerate} disabled={isGeneratingResume}>
-            Generate Resume
-          </Button>
+          {isReviewMode ? (
+            <>
+              <h3 className="text-lg font-medium mb-2">Resume Not Yet Generated</h3>
+              <p className="text-muted-foreground">
+                The resume has not been generated for this application yet.
+              </p>
+            </>
+          ) : (
+            <>
+              <h3 className="text-lg font-medium mb-2">No Resume Generated</h3>
+              <p className="text-muted-foreground mb-4">
+                Generate a tailored resume based on your experience and the job requirements.
+              </p>
+              <Button onClick={onGenerate} disabled={isGeneratingResume}>
+                Generate Resume
+              </Button>
+            </>
+          )}
         </CardContent>
       </Card>
     );
   }
 
-  // Generating - show loading state
-  if (isGeneratingResume && !resumeContent) {
+  // Generating - show loading state (generation mode only)
+  if (!isReviewMode && isGeneratingResume && !resumeContent) {
     return (
       <Card>
         <CardContent className="p-8 text-center">
@@ -112,29 +130,40 @@ export function ResumePreview({
           Resume Preview
         </CardTitle>
         <div className="flex items-center gap-2">
-          <Badge variant="outline" className="text-xs">
-            <Clock className="h-3 w-3 mr-1" aria-hidden="true" />
-            {generatedAt ? (
-              <span title={generatedAt}>
-                Generated {formatDistanceToNow(new Date(generatedAt))} ago
-              </span>
-            ) : (
-              'Generated'
-            )}
-          </Badge>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRegenerate}
-            disabled={isGeneratingResume}
-          >
-            {isGeneratingResume ? (
-              <Loader2 className="h-4 w-4 mr-1 animate-spin" aria-hidden="true" />
-            ) : (
-              <RefreshCw className="h-4 w-4 mr-1" aria-hidden="true" />
-            )}
-            Regenerate
-          </Button>
+          {isReviewMode ? (
+            resumeApproved && (
+              <Badge variant="outline" className="text-xs border-success text-success">
+                <Check className="h-3 w-3 mr-1" aria-hidden="true" />
+                Approved
+              </Badge>
+            )
+          ) : (
+            <>
+              <Badge variant="outline" className="text-xs">
+                <Clock className="h-3 w-3 mr-1" aria-hidden="true" />
+                {generatedAt ? (
+                  <span title={generatedAt}>
+                    Generated {formatDistanceToNow(new Date(generatedAt))} ago
+                  </span>
+                ) : (
+                  'Generated'
+                )}
+              </Badge>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRegenerate}
+                disabled={isGeneratingResume}
+              >
+                {isGeneratingResume ? (
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" aria-hidden="true" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-1" aria-hidden="true" />
+                )}
+                Regenerate
+              </Button>
+            </>
+          )}
         </div>
       </CardHeader>
       <CardContent>
@@ -143,24 +172,26 @@ export function ResumePreview({
         </div>
       </CardContent>
 
-      <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Regenerate Resume?</DialogTitle>
-            <DialogDescription>
-              This will replace the current resume with a new generation. The existing content will be lost.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowConfirm(false)}>
-              Cancel
-            </Button>
-            <Button onClick={confirmRegenerate}>
-              Regenerate
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {!isReviewMode && (
+        <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Regenerate Resume?</DialogTitle>
+              <DialogDescription>
+                This will replace the current resume with a new generation. The existing content will be lost.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowConfirm(false)}>
+                Cancel
+              </Button>
+              <Button onClick={confirmRegenerate}>
+                Regenerate
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </Card>
   );
 }

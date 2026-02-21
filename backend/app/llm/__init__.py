@@ -71,8 +71,10 @@ __all__ = [
 ]
 
 
-# Singleton instance
+# Singleton instances
 _provider_instance: LLMProvider | None = None
+_generation_provider_instance: LLMProvider | None = None
+_generation_model_name: str | None = None
 
 
 def get_llm_provider(config: LLMConfig | None = None) -> LLMProvider:
@@ -141,15 +143,25 @@ def _create_provider(config: LLMConfig) -> LLMProvider:
 def get_llm_provider_for_generation() -> LLMProvider:
     """Get an LLM provider for generation tasks (resume/cover letter).
 
-    When LLM_MODEL_GEN is set, creates a fresh (non-cached) provider
-    using the override model. When empty, returns the default singleton.
+    When LLM_MODEL_GEN is set, returns a cached provider using the override
+    model. Cache is invalidated if the model name changes.
+    When empty, returns the default singleton.
     """
+    global _generation_provider_instance, _generation_model_name
+
     from app.config import settings
 
     if not settings.llm_model_gen:
         return get_llm_provider()
 
-    # Create a non-cached provider with the generation-specific model
+    # Return cached instance if model hasn't changed
+    if (
+        _generation_provider_instance is not None
+        and _generation_model_name == settings.llm_model_gen
+    ):
+        return _generation_provider_instance
+
+    # Create a cached provider with the generation-specific model
     config = LLMConfig(
         provider=settings.llm_provider,
         api_key=settings.llm_api_key,
@@ -160,16 +172,21 @@ def get_llm_provider_for_generation() -> LLMProvider:
     from .instrumented_provider import DefaultCallLogger
 
     call_logger = DefaultCallLogger()
-    return InstrumentedProvider(
+    _generation_provider_instance = InstrumentedProvider(
         inner=concrete, logger=call_logger, provider_name=config.provider
     )
+    _generation_model_name = settings.llm_model_gen
+
+    return _generation_provider_instance
 
 
 def reset_provider() -> None:
     """
-    Reset the provider singleton.
+    Reset the provider singleton(s).
 
     Useful for testing or when configuration changes.
     """
-    global _provider_instance
+    global _provider_instance, _generation_provider_instance, _generation_model_name
     _provider_instance = None
+    _generation_provider_instance = None
+    _generation_model_name = None

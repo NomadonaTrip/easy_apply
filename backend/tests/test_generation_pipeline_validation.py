@@ -348,6 +348,7 @@ class TestBuildGenerationContextStructure:
             "skills", "certifications", "accomplishments", "candidate_header",
             "company_name", "job_posting", "research_context",
             "gap_note", "gap_categories", "manual_context", "keywords",
+            "keywords_raw",
         }
         assert set(context.keys()) >= required_keys
 
@@ -382,6 +383,123 @@ class TestBuildGenerationContextStructure:
         # But both accomplishments should be listed under it
         assert "Led migration" in acc_text
         assert "Reduced infrastructure costs" in acc_text
+
+
+class TestCompanyBasedGrouping:
+    """Validate build_generation_context groups by company+dates."""
+
+    @pytest.mark.asyncio
+    async def test_structured_fields_group_by_company(self, generation_ready_client):
+        """Accomplishments with company_name group by company, not context."""
+        client, role_id, app_id = generation_ready_client
+
+        # Add accomplishments with structured fields for same company, different titles
+        await client.post(
+            "/api/v1/experience/accomplishments",
+            json={
+                "description": "Designed API gateway handling 50K requests per second",
+                "context": "Senior Developer at MegaCorp",
+                "company_name": "MegaCorp",
+                "role_title": "Senior Developer",
+                "dates": "2020-2024",
+            },
+        )
+        await client.post(
+            "/api/v1/experience/accomplishments",
+            json={
+                "description": "Mentored 5 junior engineers on microservices best practices",
+                "context": "Lead Engineer at MegaCorp",
+                "company_name": "MegaCorp",
+                "role_title": "Lead Engineer",
+                "dates": "2020-2024",
+            },
+        )
+
+        from app.services import application_service
+        from app.services.generation_service import build_generation_context
+
+        application = await application_service.get_application(app_id, role_id)
+        with patch(
+            "app.services.generation_service._get_candidate_header",
+            new_callable=AsyncMock,
+            return_value="",
+        ):
+            context = await build_generation_context(application, role_id)
+
+        acc_text = context["accomplishments"]
+        # MegaCorp should appear as a single heading with both titles
+        assert "MegaCorp" in acc_text
+        assert acc_text.count("MegaCorp") == 1  # one heading only
+        assert "Senior Developer" in acc_text
+        assert "Lead Engineer" in acc_text
+        # Both accomplishments present
+        assert "Designed API gateway" in acc_text
+        assert "Mentored 5 junior engineers" in acc_text
+
+    @pytest.mark.asyncio
+    async def test_same_company_different_dates_stay_separate(self, generation_ready_client):
+        """Same company with different date ranges produces separate headings."""
+        client, role_id, app_id = generation_ready_client
+
+        await client.post(
+            "/api/v1/experience/accomplishments",
+            json={
+                "description": "Built initial product from scratch",
+                "context": "Developer at LoopCo",
+                "company_name": "LoopCo",
+                "role_title": "Developer",
+                "dates": "2015-2018",
+            },
+        )
+        await client.post(
+            "/api/v1/experience/accomplishments",
+            json={
+                "description": "Led platform migration to cloud",
+                "context": "Senior Developer at LoopCo",
+                "company_name": "LoopCo",
+                "role_title": "Senior Developer",
+                "dates": "2021-2024",
+            },
+        )
+
+        from app.services import application_service
+        from app.services.generation_service import build_generation_context
+
+        application = await application_service.get_application(app_id, role_id)
+        with patch(
+            "app.services.generation_service._get_candidate_header",
+            new_callable=AsyncMock,
+            return_value="",
+        ):
+            context = await build_generation_context(application, role_id)
+
+        acc_text = context["accomplishments"]
+        # LoopCo should appear twice (different date ranges)
+        assert acc_text.count("LoopCo") == 2
+        assert "2015-2018" in acc_text
+        assert "2021-2024" in acc_text
+
+    @pytest.mark.asyncio
+    async def test_legacy_accomplishments_fallback_to_context(self, generation_ready_client):
+        """Accomplishments without structured fields use context as grouping key."""
+        client, role_id, app_id = generation_ready_client
+
+        # The fixture already created accomplishments with only context (no structured fields)
+        from app.services import application_service
+        from app.services.generation_service import build_generation_context
+
+        application = await application_service.get_application(app_id, role_id)
+        with patch(
+            "app.services.generation_service._get_candidate_header",
+            new_callable=AsyncMock,
+            return_value="",
+        ):
+            context = await build_generation_context(application, role_id)
+
+        acc_text = context["accomplishments"]
+        # Legacy context strings should still work as headings
+        assert "### TechCo, 2024" in acc_text
+        assert "### StartupX, 2023" in acc_text
 
 
 class TestBuildResearchContextWithGaps:
@@ -438,3 +556,421 @@ class TestBuildResearchContextWithGaps:
 
         _, gap_note = build_research_context(research)
         assert gap_note is None
+
+
+# ============================================================================
+# Enriched Keyword Formatting Tests
+# ============================================================================
+
+
+class TestEnrichedKeywordFormatting:
+    """Validate _format_keywords_tiered produces priority-tiered output."""
+
+    def test_keywords_grouped_by_priority_tier(self):
+        """Keywords are grouped into MUST-HAVE, IMPORTANT, NICE-TO-HAVE."""
+        from app.services.generation_service import _format_keywords_tiered
+
+        keywords = [
+            {"text": "Python", "priority": 10, "category": "technical_skill", "pattern_boosted": True},
+            {"text": "FastAPI", "priority": 9, "category": "tool", "pattern_boosted": False},
+            {"text": "CI/CD", "priority": 7, "category": "tool", "pattern_boosted": False},
+            {"text": "Agile", "priority": 3, "category": "general", "pattern_boosted": False},
+        ]
+
+        result = _format_keywords_tiered(keywords)
+
+        assert "MUST-HAVE" in result
+        assert "IMPORTANT" in result
+        assert "NICE-TO-HAVE" in result
+        # Python should be in MUST-HAVE section
+        assert "Python" in result
+        # Agile in NICE-TO-HAVE
+        assert "Agile" in result
+
+    def test_keywords_show_category_and_priority(self):
+        """Each keyword line includes category and priority metadata."""
+        from app.services.generation_service import _format_keywords_tiered
+
+        keywords = [
+            {"text": "Python", "priority": 10, "category": "technical_skill", "pattern_boosted": False},
+        ]
+
+        result = _format_keywords_tiered(keywords)
+        assert "[technical_skill, priority: 10]" in result
+
+    def test_pattern_boosted_marker(self):
+        """Pattern-boosted keywords get a * marker and legend."""
+        from app.services.generation_service import _format_keywords_tiered
+
+        keywords = [
+            {"text": "Python", "priority": 10, "category": "technical_skill", "pattern_boosted": True},
+            {"text": "React", "priority": 8, "category": "technical_skill", "pattern_boosted": False},
+        ]
+
+        result = _format_keywords_tiered(keywords)
+        # Python line should have * marker
+        python_line = [l for l in result.split("\n") if "Python" in l][0]
+        assert python_line.endswith("*")
+        # React line should NOT have * marker
+        react_line = [l for l in result.split("\n") if "React" in l][0]
+        assert not react_line.endswith("*")
+        # Legend present
+        assert "pattern-boosted" in result
+
+    def test_empty_keywords_returns_fallback(self):
+        """Empty keywords list returns fallback text."""
+        from app.services.generation_service import _format_keywords_tiered
+
+        assert _format_keywords_tiered([]) == "No keywords specified"
+
+    def test_single_tier_only(self):
+        """Keywords in only one tier don't produce empty tier headers."""
+        from app.services.generation_service import _format_keywords_tiered
+
+        keywords = [
+            {"text": "Python", "priority": 10, "category": "technical_skill", "pattern_boosted": False},
+        ]
+
+        result = _format_keywords_tiered(keywords)
+        assert "MUST-HAVE" in result
+        assert "IMPORTANT" not in result
+        assert "NICE-TO-HAVE" not in result
+
+    @pytest.mark.asyncio
+    async def test_context_keywords_are_tiered(self, generation_ready_client):
+        """build_generation_context produces tiered keyword text."""
+        client, role_id, app_id = generation_ready_client
+
+        from app.services import application_service
+        from app.services.generation_service import build_generation_context
+
+        application = await application_service.get_application(app_id, role_id)
+        with patch(
+            "app.services.generation_service._get_candidate_header",
+            new_callable=AsyncMock,
+            return_value="",
+        ):
+            context = await build_generation_context(application, role_id)
+
+        # Fixture keywords are all priority 8-10, so only MUST-HAVE tier
+        assert "MUST-HAVE" in context["keywords"]
+        assert isinstance(context["keywords_raw"], list)
+        assert len(context["keywords_raw"]) == 3
+
+    @pytest.mark.asyncio
+    async def test_context_keywords_raw_preserves_metadata(self, generation_ready_client):
+        """keywords_raw preserves priority, category, and pattern_boosted."""
+        client, role_id, app_id = generation_ready_client
+
+        from app.services import application_service
+        from app.services.generation_service import build_generation_context
+
+        application = await application_service.get_application(app_id, role_id)
+        with patch(
+            "app.services.generation_service._get_candidate_header",
+            new_callable=AsyncMock,
+            return_value="",
+        ):
+            context = await build_generation_context(application, role_id)
+
+        python_kw = next(kw for kw in context["keywords_raw"] if kw["text"] == "Python")
+        assert python_kw["priority"] == 10
+        assert python_kw["category"] == "technical_skill"
+
+
+# ============================================================================
+# Accomplishment Annotation Tests
+# ============================================================================
+
+
+class TestAccomplishmentAnnotations:
+    """Validate _annotate_accomplishments adds relevance tags."""
+
+    def test_annotations_added_for_matching_keywords(self):
+        """Headings get [Relevant to: ...] when bullets mention high-priority keywords."""
+        from app.services.generation_service import _annotate_accomplishments
+
+        accomplishments = (
+            "### Senior Engineer | Google | 2020-2023\n"
+            "- Built distributed cache layer using Python and FastAPI\n"
+            "- Reduced API latency by 40%\n"
+            "\n"
+            "### Junior Dev | Startup | 2018-2020\n"
+            "- Maintained legacy PHP application\n"
+        )
+
+        keywords = [
+            {"text": "Python", "priority": 10, "category": "technical_skill"},
+            {"text": "FastAPI", "priority": 9, "category": "tool"},
+            {"text": "React", "priority": 8, "category": "technical_skill"},
+        ]
+
+        result = _annotate_accomplishments(accomplishments, keywords)
+
+        # Google heading should have Python and FastAPI annotations
+        assert "[Relevant to: Python, FastAPI]" in result
+        # Startup heading should NOT have annotations (no keyword matches)
+        startup_heading = [l for l in result.split("\n") if "Startup" in l][0]
+        assert "[Relevant to:" not in startup_heading
+
+    def test_no_annotations_when_no_high_priority_keywords(self):
+        """No annotations when all keywords are below priority 7."""
+        from app.services.generation_service import _annotate_accomplishments
+
+        accomplishments = "### Engineer | Co | 2020\n- Did Python stuff\n"
+        keywords = [{"text": "Python", "priority": 3, "category": "general"}]
+
+        result = _annotate_accomplishments(accomplishments, keywords)
+        assert "[Relevant to:" not in result
+
+
+# ============================================================================
+# Keyword Coverage Check Tests
+# ============================================================================
+
+
+class TestKeywordCoverage:
+    """Validate check_keyword_coverage returns correct metrics."""
+
+    def test_full_coverage(self):
+        """All keywords present yields 100% coverage."""
+        from app.utils.text_processing import check_keyword_coverage
+
+        text = "Experience with Python, FastAPI, and React for building web apps."
+        keywords = [
+            {"text": "Python", "priority": 10, "category": "technical_skill"},
+            {"text": "FastAPI", "priority": 9, "category": "tool"},
+            {"text": "React", "priority": 8, "category": "technical_skill"},
+        ]
+
+        result = check_keyword_coverage(text, keywords)
+        assert result["must_have_coverage"] == 1.0
+        assert result["must_have_missing"] == []
+        assert result["below_threshold"] is False
+
+    def test_partial_coverage(self):
+        """Some keywords missing shows correct partial coverage."""
+        from app.utils.text_processing import check_keyword_coverage
+
+        text = "Experience with Python for building web apps."
+        keywords = [
+            {"text": "Python", "priority": 10, "category": "technical_skill"},
+            {"text": "FastAPI", "priority": 9, "category": "tool"},
+            {"text": "React", "priority": 8, "category": "technical_skill"},
+        ]
+
+        result = check_keyword_coverage(text, keywords)
+        assert abs(result["must_have_coverage"] - 1 / 3) < 0.01
+        assert "FastAPI" in result["must_have_missing"]
+        assert "React" in result["must_have_missing"]
+        assert result["below_threshold"] is True
+
+    def test_below_threshold_flag(self):
+        """below_threshold is True when must-have coverage < 60%."""
+        from app.utils.text_processing import check_keyword_coverage
+
+        text = "No relevant keywords here at all."
+        keywords = [
+            {"text": "Python", "priority": 10, "category": "technical_skill"},
+            {"text": "FastAPI", "priority": 9, "category": "tool"},
+        ]
+
+        result = check_keyword_coverage(text, keywords)
+        assert result["must_have_coverage"] == 0.0
+        assert result["below_threshold"] is True
+
+    def test_empty_keywords(self):
+        """Empty keywords list returns zeroed metrics, no threshold flag."""
+        from app.utils.text_processing import check_keyword_coverage
+
+        result = check_keyword_coverage("Some text", [])
+        assert result["must_have_coverage"] == 0.0
+        assert result["below_threshold"] is False
+
+    def test_empty_text(self):
+        """Empty text returns zeroed metrics."""
+        from app.utils.text_processing import check_keyword_coverage
+
+        result = check_keyword_coverage("", [{"text": "Python", "priority": 10}])
+        assert result["must_have_coverage"] == 0.0
+        assert result["below_threshold"] is False
+
+    def test_case_insensitive_matching(self):
+        """Keyword matching is case-insensitive."""
+        from app.utils.text_processing import check_keyword_coverage
+
+        text = "Built applications with python and fastapi."
+        keywords = [
+            {"text": "Python", "priority": 10, "category": "technical_skill"},
+            {"text": "FastAPI", "priority": 9, "category": "tool"},
+        ]
+
+        result = check_keyword_coverage(text, keywords)
+        assert result["must_have_coverage"] == 1.0
+
+    def test_important_tier_coverage(self):
+        """Important tier (priority 5-7) is tracked separately."""
+        from app.utils.text_processing import check_keyword_coverage
+
+        text = "Used CI/CD pipelines and Agile methodology."
+        keywords = [
+            {"text": "Python", "priority": 10, "category": "technical_skill"},
+            {"text": "CI/CD", "priority": 7, "category": "tool"},
+            {"text": "Agile", "priority": 5, "category": "general"},
+            {"text": "Docker", "priority": 6, "category": "tool"},
+        ]
+
+        result = check_keyword_coverage(text, keywords)
+        # must-have: Python missing -> 0%
+        assert result["must_have_coverage"] == 0.0
+        # important: CI/CD and Agile found, Docker missing -> 2/3
+        assert abs(result["important_coverage"] - 2 / 3) < 0.01
+
+    def test_fuzzy_morphological_match(self):
+        """'Cross-functional Collaboration' found via 'collaborated with cross-functional teams'."""
+        from app.utils.text_processing import keyword_found
+
+        text = "collaborated with cross-functional engineering and design teams"
+        assert keyword_found("Cross-functional Collaboration", text.lower()) is True
+
+    def test_fuzzy_all_words_required(self):
+        """'Stakeholder Management' NOT found when only 'stakeholder' is present."""
+        from app.utils.text_processing import keyword_found
+
+        text = "presented to stakeholder groups"
+        assert keyword_found("Stakeholder Management", text.lower()) is False
+
+    def test_fuzzy_single_word_keyword(self):
+        """Single word keyword 'Leadership' matched via exact substring."""
+        from app.utils.text_processing import keyword_found
+
+        text = "demonstrated strong leadership across multiple teams"
+        assert keyword_found("Leadership", text.lower()) is True
+
+    def test_fuzzy_does_not_false_positive_on_short_overlap(self):
+        """Fuzzy match requires ALL content words, not just some."""
+        from app.utils.text_processing import keyword_found
+
+        text = "analyzed competitive market data"
+        # "Customer Data/Insights" — slash step should match "customer data" or "insights"
+        # but neither "customer data" nor "insights" appears
+        assert keyword_found("Customer Data/Insights", text.lower()) is False
+
+    def test_fuzzy_coverage_integration(self):
+        """check_keyword_coverage counts fuzzy matches correctly."""
+        from app.utils.text_processing import check_keyword_coverage
+
+        text = (
+            "collaborated with cross-functional engineering teams. "
+            "managed key stakeholders across product and design. "
+            "conducted competitive market analysis for product positioning."
+        )
+        keywords = [
+            {"text": "Cross-functional Collaboration", "priority": 10, "category": "general"},
+            {"text": "Stakeholder Management", "priority": 9, "category": "general"},
+            {"text": "Competitive Analysis", "priority": 8, "category": "general"},
+        ]
+
+        result = check_keyword_coverage(text, keywords)
+        assert result["must_have_coverage"] == 1.0
+        assert result["must_have_missing"] == []
+
+    def test_annotation_fuzzy_matching(self):
+        """_annotate_accomplishments tags headings using fuzzy matching."""
+        from app.services.generation_service import _annotate_accomplishments
+
+        accomplishments = (
+            "### Product Manager | Acme | 2022-2024\n"
+            "- Collaborated with cross-functional engineering and design teams\n"
+            "- Managed key stakeholders to align on product roadmap\n"
+        )
+        keywords = [
+            {"text": "Cross-functional Collaboration", "priority": 10, "category": "general"},
+            {"text": "Stakeholder Management", "priority": 9, "category": "general"},
+            {"text": "React", "priority": 8, "category": "technical_skill"},
+        ]
+
+        result = _annotate_accomplishments(accomplishments, keywords)
+        assert "Cross-functional Collaboration" in result
+        assert "Stakeholder Management" in result
+        assert "React" not in result.split("[Relevant to:")[1] if "[Relevant to:" in result else True
+
+
+# ============================================================================
+# Skill Enrichment Feedback Loop Tests
+# ============================================================================
+
+
+class TestSkillEnrichment:
+    """Validate enrich_skills_from_keywords feedback loop."""
+
+    @pytest.mark.asyncio
+    async def test_enrich_adds_keyword_as_skill(self, generation_ready_client):
+        """Keyword that fuzzy-matches an accomplishment gets persisted as new skill."""
+        client, role_id, app_id = generation_ready_client
+
+        from app.services.extraction_service import enrich_skills_from_keywords
+        from app.services import experience_service
+
+        accomplishments = await experience_service.get_accomplishments(role_id)
+        skills = await experience_service.get_skills(role_id)
+
+        # "FastAPI" is already a skill AND appears in accomplishments,
+        # but "API microservices" is not a skill — if we pass it as a keyword
+        # and it fuzzy-matches "microservices" in accomplishments, it gets added
+        keywords = [
+            {"text": "API Development", "priority": 8, "category": "technical_skill"},
+        ]
+
+        # The accomplishment contains "API to FastAPI microservices" which has
+        # both "api" and "devel" prefixes won't match... let's use a keyword
+        # that we know will match accomplishment text
+        # Accomplishment text: "Led migration of monolithic API to FastAPI microservices, reducing latency by 40%"
+        keywords = [
+            {"text": "API Migration", "priority": 8, "category": "technical_skill"},
+        ]
+
+        added = await enrich_skills_from_keywords(role_id, keywords, accomplishments, skills)
+        assert added == 1
+
+        # Verify skill was actually persisted
+        updated_skills = await experience_service.get_skills(role_id)
+        skill_names = [s.name.lower() for s in updated_skills]
+        assert "api migration" in skill_names
+
+    @pytest.mark.asyncio
+    async def test_enrich_skips_exact_duplicate(self, generation_ready_client):
+        """Keyword already in skills library (exact match) is not re-added."""
+        client, role_id, app_id = generation_ready_client
+
+        from app.services.extraction_service import enrich_skills_from_keywords
+        from app.services import experience_service
+
+        accomplishments = await experience_service.get_accomplishments(role_id)
+        skills = await experience_service.get_skills(role_id)
+
+        # "Python" is already a skill
+        keywords = [
+            {"text": "Python", "priority": 10, "category": "technical_skill"},
+        ]
+
+        added = await enrich_skills_from_keywords(role_id, keywords, accomplishments, skills)
+        assert added == 0
+
+    @pytest.mark.asyncio
+    async def test_enrich_skips_low_priority(self, generation_ready_client):
+        """Priority < 5 keywords are not added even if they match."""
+        client, role_id, app_id = generation_ready_client
+
+        from app.services.extraction_service import enrich_skills_from_keywords
+        from app.services import experience_service
+
+        accomplishments = await experience_service.get_accomplishments(role_id)
+        skills = await experience_service.get_skills(role_id)
+
+        keywords = [
+            {"text": "API Migration", "priority": 3, "category": "technical_skill"},
+        ]
+
+        added = await enrich_skills_from_keywords(role_id, keywords, accomplishments, skills)
+        assert added == 0

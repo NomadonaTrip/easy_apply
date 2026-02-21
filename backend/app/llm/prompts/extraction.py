@@ -35,20 +35,34 @@ Instructions:
 2. Include context (role, company, or project when mentioned)
 3. Focus on impact and results, not just responsibilities
 4. Rephrase vague statements into concrete accomplishments
+5. Extract the company name, role title, and employment dates as separate fields when available
 
 Return a JSON array of accomplishments with this structure:
 {{
   "accomplishments": [
     {{
       "description": "Led migration to microservices, reducing deployment time by 60%",
-      "context": "Senior Engineer at TechCorp"
+      "context": "Senior Engineer at TechCorp",
+      "company_name": "TechCorp",
+      "role_title": "Senior Engineer",
+      "dates": "2020-2024"
     }},
     {{
       "description": "Grew team from 3 to 12 engineers while maintaining velocity",
-      "context": "Engineering Manager"
+      "context": "Engineering Manager at StartupCo",
+      "company_name": "StartupCo",
+      "role_title": "Engineering Manager",
+      "dates": "2018-2020"
     }}
   ]
 }}
+
+Notes:
+- "context" is a human-readable summary of the role (keep for backward compatibility)
+- "company_name" is ONLY the company/organization name
+- "role_title" is ONLY the job title
+- "dates" is the employment period (e.g., "2020-2024", "Jan 2020 - Present")
+- If any field is unknown, set it to null
 
 Return ONLY the JSON, no other text.
 """

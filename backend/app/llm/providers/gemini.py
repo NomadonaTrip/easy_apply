@@ -43,20 +43,38 @@ class GeminiProvider(LLMProvider):
         """Get the model name."""
         return self._model_name
 
-    def _build_contents(self, messages: list[Message]) -> list[types.Content]:
-        """Convert abstract messages to Gemini content format."""
+    def _build_contents(self, messages: list[Message]) -> tuple[list[types.Content], str | None]:
+        """Convert abstract messages to Gemini content format.
+
+        Returns (contents, system_instruction) where system_instruction is
+        skill-based only (from set_system_instruction). SYSTEM role messages
+        are prepended to the first USER message to avoid altering the
+        system_instruction payload sent to the Gemini API.
+        """
         contents = []
+        system_parts: list[str] = []
+
+        # Collect SYSTEM messages (will be prepended to first user message)
+        for msg in messages:
+            if msg.role == Role.SYSTEM and msg.content:
+                system_parts.append(msg.content)
+
+        system_prefix = "\n\n".join(system_parts) if system_parts else None
 
         for msg in messages:
             if msg.role == Role.SYSTEM:
-                # System messages are handled via system_instruction
-                continue
+                continue  # Already collected above
 
             if msg.role == Role.USER:
+                text = msg.content
+                # Prepend system context to first user message
+                if system_prefix:
+                    text = f"{system_prefix}\n\n---\n\n{text}"
+                    system_prefix = None  # Only prepend once
                 contents.append(
                     types.Content(
                         role="user",
-                        parts=[types.Part.from_text(text=msg.content)],
+                        parts=[types.Part.from_text(text=text)],
                     )
                 )
 
@@ -91,7 +109,7 @@ class GeminiProvider(LLMProvider):
                     )
                 )
 
-        return contents
+        return contents, self._system_instruction
 
     def _build_tools(self, tools: list[Tool]) -> list[types.Tool]:
         """Convert abstract tools to Gemini tool format."""
@@ -111,6 +129,7 @@ class GeminiProvider(LLMProvider):
         self,
         config: GenerationConfig | None,
         tools: list[types.Tool] | None = None,
+        system_instruction: str | None = None,
     ) -> types.GenerateContentConfig:
         """Build generation config."""
         if not config:
@@ -122,7 +141,7 @@ class GeminiProvider(LLMProvider):
             top_p=config.top_p,
             top_k=config.top_k,
             stop_sequences=config.stop_sequences if config.stop_sequences else None,
-            system_instruction=self._system_instruction,
+            system_instruction=system_instruction,
         )
 
         if tools:
@@ -179,8 +198,8 @@ class GeminiProvider(LLMProvider):
         config: GenerationConfig | None = None,
     ) -> Message:
         """Generate a single response."""
-        contents = self._build_contents(messages)
-        gen_config = self._build_config(config)
+        contents, system_instruction = self._build_contents(messages)
+        gen_config = self._build_config(config, system_instruction=system_instruction)
 
         response = await self._client.aio.models.generate_content(
             model=self._model_name,
@@ -196,8 +215,8 @@ class GeminiProvider(LLMProvider):
         config: GenerationConfig | None = None,
     ) -> AsyncIterator[str]:
         """Generate a streaming response."""
-        contents = self._build_contents(messages)
-        gen_config = self._build_config(config)
+        contents, system_instruction = self._build_contents(messages)
+        gen_config = self._build_config(config, system_instruction=system_instruction)
 
         async for chunk in self._client.aio.models.generate_content_stream(
             model=self._model_name,
@@ -215,9 +234,9 @@ class GeminiProvider(LLMProvider):
         config: GenerationConfig | None = None,
     ) -> tuple[Message, list[ToolCall]]:
         """Generate a response with tool/function calling support."""
-        contents = self._build_contents(messages)
+        contents, system_instruction = self._build_contents(messages)
         gemini_tools = self._build_tools(tools)
-        gen_config = self._build_config(config, tools=gemini_tools)
+        gen_config = self._build_config(config, tools=gemini_tools, system_instruction=system_instruction)
 
         response = await self._client.aio.models.generate_content(
             model=self._model_name,

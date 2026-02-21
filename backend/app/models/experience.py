@@ -77,6 +77,9 @@ class Accomplishment(SQLModel, table=True):
     role_id: int = Field(foreign_key="roles.id", index=True)
     description: str = Field(max_length=1000)
     context: Optional[str] = Field(default=None, max_length=500)
+    company_name: Optional[str] = Field(default=None, max_length=200)
+    role_title: Optional[str] = Field(default=None, max_length=200)
+    dates: Optional[str] = Field(default=None, max_length=100)
     source: Optional[str] = Field(default=None, max_length=50)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
@@ -105,6 +108,9 @@ class AccomplishmentCreate(SQLModel):
 
     description: str = Field(min_length=1, max_length=1000)
     context: Optional[str] = Field(default=None, max_length=500)
+    company_name: Optional[str] = Field(default=None, max_length=200)
+    role_title: Optional[str] = Field(default=None, max_length=200)
+    dates: Optional[str] = Field(default=None, max_length=100)
     source: Optional[str] = Field(default=None, max_length=50)
 
 
@@ -115,6 +121,9 @@ class AccomplishmentRead(SQLModel):
     role_id: int
     description: str
     context: Optional[str]
+    company_name: Optional[str]
+    role_title: Optional[str]
+    dates: Optional[str]
     source: Optional[str]
     created_at: datetime
 
@@ -124,4 +133,7 @@ class AccomplishmentUpdate(SQLModel):
 
     description: Optional[str] = Field(default=None, min_length=1, max_length=1000)
     context: Optional[str] = Field(default=None, max_length=500)
+    company_name: Optional[str] = Field(default=None, max_length=200)
+    role_title: Optional[str] = Field(default=None, max_length=200)
+    dates: Optional[str] = Field(default=None, max_length=100)
     source: Optional[str] = Field(default=None, max_length=50)

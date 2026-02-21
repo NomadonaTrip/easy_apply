@@ -189,6 +189,9 @@ async def create_accomplishment(
             role_id=role_id,
             description=data.description,
             context=data.context,
+            company_name=data.company_name,
+            role_title=data.role_title,
+            dates=data.dates,
             source=data.source,
         )
         session.add(accomplishment)

@@ -16,10 +16,8 @@ import json
 
 import pytest
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
 from unittest.mock import patch, AsyncMock, MagicMock
 
-from app.main import app
 from app.models.keyword import Keyword, KeywordList, KeywordCategory, KeywordExtractionResponse
 from app.services.keyword_service import keywords_to_json, json_to_keywords
 
@@ -196,25 +194,24 @@ class TestKeywordExtractionResponseContract:
 
 
 @pytest_asyncio.fixture
-async def authenticated_client():
-    """Create an authenticated client with a session cookie."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        await ac.post("/api/v1/auth/register", json={
-            "username": "contractuser", "password": "TestPass123!"
-        })
-        await ac.post("/api/v1/auth/login", json={
-            "username": "contractuser", "password": "TestPass123!"
-        })
-        yield ac
+async def client_with_role(async_client):
+    """Authenticated client with role, using standard async_client from conftest."""
+    await async_client.post(
+        "/api/v1/auth/register",
+        json={"username": "contractuser", "password": "TestPass123!"},
+    )
+    login = await async_client.post(
+        "/api/v1/auth/login",
+        json={"username": "contractuser", "password": "TestPass123!"},
+    )
+    async_client.cookies = login.cookies
 
-
-@pytest_asyncio.fixture
-async def client_with_role(authenticated_client):
-    """Create a client with an authenticated session and active role."""
-    role_response = await authenticated_client.post("/api/v1/roles", json={"name": "Contract Test Role"})
-    role_id = role_response.json()["id"]
-    authenticated_client.headers["X-Role-Id"] = str(role_id)
-    return authenticated_client, role_id
+    role_resp = await async_client.post(
+        "/api/v1/roles", json={"name": "Contract Test Role"},
+    )
+    role_id = role_resp.json()["id"]
+    async_client.headers["X-Role-Id"] = str(role_id)
+    return async_client, role_id
 
 
 class TestKeywordExtractionEndpointContract:
