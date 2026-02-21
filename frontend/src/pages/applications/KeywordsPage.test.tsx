@@ -119,4 +119,52 @@ describe('KeywordsPage', () => {
     expect(screen.queryByText('Saved')).not.toBeInTheDocument();
     expect(screen.queryByText('Saving...')).not.toBeInTheDocument();
   });
+
+  it('renders pattern_boosted keywords without error', async () => {
+    const appWithBoostedKeywords = {
+      ...mockApplication,
+      keywords: JSON.stringify([
+        { text: 'Python', priority: 9, category: 'technical_skill', pattern_boosted: true },
+        { text: 'React', priority: 8, category: 'technical_skill', pattern_boosted: true },
+        { text: 'Docker', priority: 6, category: 'tool', pattern_boosted: false },
+      ]),
+    };
+    vi.mocked(getApplication).mockResolvedValue(appWithBoostedKeywords);
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('Python')).toBeInTheDocument();
+      expect(screen.getByText('React')).toBeInTheDocument();
+      expect(screen.getByText('Docker')).toBeInTheDocument();
+    });
+  });
+
+  it('shows pattern boost alert when boosted keywords exist', async () => {
+    const appWithBoostedKeywords = {
+      ...mockApplication,
+      keywords: JSON.stringify([
+        { text: 'Python', priority: 9, category: 'technical_skill', pattern_boosted: true },
+        { text: 'React', priority: 8, category: 'technical_skill', pattern_boosted: true },
+        { text: 'Docker', priority: 6, category: 'tool', pattern_boosted: false },
+      ]),
+    };
+    vi.mocked(getApplication).mockResolvedValue(appWithBoostedKeywords);
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('Learning from your success')).toBeInTheDocument();
+      expect(screen.getByText(/2 keywords? boosted/)).toBeInTheDocument();
+    });
+  });
+
+  it('does not show pattern boost alert when no keywords are boosted', async () => {
+    vi.mocked(getApplication).mockResolvedValue(mockApplication);
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('Python')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText('Learning from your success')).not.toBeInTheDocument();
+  });
 });

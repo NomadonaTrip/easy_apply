@@ -2,19 +2,45 @@
 
 import json
 import logging
+from collections import defaultdict
 from typing import Optional
 
-from app.llm import get_llm_provider, Message
+from app.llm import get_llm_provider, get_llm_provider_for_generation, Message
 from app.llm.prompts import PromptRegistry
 from app.llm.skills.loader import SkillLoader
 from app.llm.types import GenerationConfig, Role
 from app.models.application import Application, ApplicationUpdate, GenerationStatus
 from app.models.research import ResearchResult
-from app.services import application_service, experience_service
+from app.services import application_service, experience_service, resume_service
+from app.utils.document_parser import extract_text
 from app.utils.llm_helpers import build_research_context, generate_with_retry
 from app.utils.text_processing import enforce_output_constraints
 
 logger = logging.getLogger(__name__)
+
+# Skill categories that represent certifications/qualifications
+_CERTIFICATION_CATEGORIES = {"certification", "certifications", "qualification", "qualifications"}
+
+
+async def _get_candidate_header(role_id: int) -> str:
+    """Extract candidate identity header from the most recent processed resume.
+
+    Returns the first ~500 characters of resume text which typically
+    contains the candidate's name, contact info, and summary.
+    """
+    try:
+        resumes = await resume_service.get_resumes(role_id)
+        processed = [r for r in resumes if r.processed]
+        if not processed:
+            return ""
+        # Use the most recently uploaded processed resume
+        latest = max(processed, key=lambda r: r.uploaded_at)
+        text = extract_text(latest.file_path, latest.file_type)
+        # Return header section (name + contact typically in first ~500 chars)
+        return text[:500].strip() if text else ""
+    except Exception as e:
+        logger.warning("Failed to extract candidate header: %s", e)
+        return ""
 
 
 async def build_generation_context(
@@ -24,24 +50,53 @@ async def build_generation_context(
     """Build context dict for generation prompts from experience DB and application data.
 
     Returns dict with keys matching prompt template placeholders:
-    skills, accomplishments, company_name, job_posting, research_context,
+    skills, certifications, accomplishments, candidate_header,
+    company_name, job_posting, research_context,
     gap_note, manual_context, keywords.
     """
     # Get experience data
     skills = await experience_service.get_skills(role_id)
     accomplishments = await experience_service.get_accomplishments(role_id)
 
-    # Format skills
+    # Separate certifications from skills
+    cert_skills = []
+    regular_skills = []
+    for s in skills:
+        if s.category and s.category.lower() in _CERTIFICATION_CATEGORIES:
+            cert_skills.append(s)
+        else:
+            regular_skills.append(s)
+
+    # Format skills (excluding certifications)
     skills_text = "\n".join(
         f"- {s.name}" + (f" ({s.category})" if s.category else "")
-        for s in skills
+        for s in regular_skills
     ) or "No skills data available"
 
-    # Format accomplishments
-    accomplishments_text = "\n".join(
-        f"- {a.description}" + (f" [{a.context}]" if a.context else "")
-        for a in accomplishments
-    ) or "No accomplishments data available"
+    # Format certifications
+    certifications_text = "\n".join(
+        f"- {s.name}" for s in cert_skills
+    ) or "None listed"
+
+    # Format accomplishments grouped by role/context
+    role_groups: dict[str, list[str]] = defaultdict(list)
+    for a in accomplishments:
+        role_key = a.context or "Other"
+        role_groups[role_key].append(a.description)
+
+    if role_groups:
+        parts = []
+        for role_context, descs in role_groups.items():
+            parts.append(f"### {role_context}")
+            for desc in descs:
+                parts.append(f"- {desc}")
+            parts.append("")  # blank line between groups
+        accomplishments_text = "\n".join(parts)
+    else:
+        accomplishments_text = "No accomplishments data available"
+
+    # Get candidate identity from resume header
+    candidate_header = await _get_candidate_header(role_id)
 
     # Parse keywords from JSON
     keywords_list = json.loads(application.keywords) if application.keywords else []
@@ -72,7 +127,9 @@ async def build_generation_context(
 
     return {
         "skills": skills_text,
+        "certifications": certifications_text,
         "accomplishments": accomplishments_text,
+        "candidate_header": candidate_header,
         "company_name": application.company_name,
         "job_posting": application.job_posting,
         "research_context": research_context,
@@ -108,8 +165,8 @@ async def generate_resume(
         prompt = PromptRegistry.get("generation_resume", **context)
         system_prompt = PromptRegistry.get("generation_resume_system")
 
-        # Get LLM provider
-        provider = get_llm_provider()
+        # Get LLM provider (uses LLM_MODEL_GEN override if set)
+        provider = get_llm_provider_for_generation()
 
         # Load resume-tailoring skill if available
         if SkillLoader.skill_exists("resume_tailoring"):
@@ -187,8 +244,8 @@ async def generate_cover_letter(
         prompt = PromptRegistry.get("generation_cover_letter", **context)
         system_prompt = PromptRegistry.get("generation_cover_letter_system")
 
-        # Generate
-        provider = get_llm_provider()
+        # Generate (uses LLM_MODEL_GEN override if set)
+        provider = get_llm_provider_for_generation()
         config = GenerationConfig(prompt_name="generation_cover_letter")
         messages = [
             Message(role=Role.SYSTEM, content=system_prompt),

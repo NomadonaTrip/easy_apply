@@ -254,6 +254,136 @@ class TestPipelineDataShapesForGeneration:
         assert len(accomplishments) == 2
 
 
+class TestBuildGenerationContextStructure:
+    """Validate build_generation_context produces correct structural format."""
+
+    @pytest.mark.asyncio
+    async def test_accomplishments_grouped_by_role(self, generation_ready_client):
+        """Accomplishments must be grouped by their context (role) field."""
+        client, role_id, app_id = generation_ready_client
+
+        from app.services import application_service
+        from app.services.generation_service import build_generation_context
+
+        application = await application_service.get_application(app_id, role_id)
+        with patch(
+            "app.services.generation_service._get_candidate_header",
+            new_callable=AsyncMock,
+            return_value="Jane Doe\njane@example.com",
+        ):
+            context = await build_generation_context(application, role_id)
+
+        # Accomplishments should contain role headings (### context)
+        acc_text = context["accomplishments"]
+        assert "### TechCo, 2024" in acc_text
+        assert "### StartupX, 2023" in acc_text
+        # Accomplishments under their respective roles
+        assert "Led migration" in acc_text
+        assert "Built real-time dashboard" in acc_text
+
+    @pytest.mark.asyncio
+    async def test_certifications_separated_from_skills(self, generation_ready_client):
+        """Skills with certification category are separated into certifications field."""
+        client, role_id, app_id = generation_ready_client
+
+        # Add a certification skill
+        await client.post(
+            "/api/v1/experience/skills",
+            json={"name": "AWS Solutions Architect", "category": "Certification"},
+        )
+
+        from app.services import application_service
+        from app.services.generation_service import build_generation_context
+
+        application = await application_service.get_application(app_id, role_id)
+        with patch(
+            "app.services.generation_service._get_candidate_header",
+            new_callable=AsyncMock,
+            return_value="Jane Doe\njane@example.com",
+        ):
+            context = await build_generation_context(application, role_id)
+
+        # Certifications should be in separate field
+        assert "AWS Solutions Architect" in context["certifications"]
+        # And NOT in the regular skills field
+        assert "AWS Solutions Architect" not in context["skills"]
+        # Regular skills still present
+        assert "Python" in context["skills"]
+
+    @pytest.mark.asyncio
+    async def test_candidate_header_included_in_context(self, generation_ready_client):
+        """Context must include candidate_header for identity preservation."""
+        client, role_id, app_id = generation_ready_client
+
+        from app.services import application_service
+        from app.services.generation_service import build_generation_context
+
+        application = await application_service.get_application(app_id, role_id)
+        with patch(
+            "app.services.generation_service._get_candidate_header",
+            new_callable=AsyncMock,
+            return_value="Jane Doe\njane@example.com\n555-0100",
+        ):
+            context = await build_generation_context(application, role_id)
+
+        assert context["candidate_header"] == "Jane Doe\njane@example.com\n555-0100"
+
+    @pytest.mark.asyncio
+    async def test_context_has_all_required_keys(self, generation_ready_client):
+        """Context dict must have all keys needed by generation prompts."""
+        client, role_id, app_id = generation_ready_client
+
+        from app.services import application_service
+        from app.services.generation_service import build_generation_context
+
+        application = await application_service.get_application(app_id, role_id)
+        with patch(
+            "app.services.generation_service._get_candidate_header",
+            new_callable=AsyncMock,
+            return_value="",
+        ):
+            context = await build_generation_context(application, role_id)
+
+        required_keys = {
+            "skills", "certifications", "accomplishments", "candidate_header",
+            "company_name", "job_posting", "research_context",
+            "gap_note", "gap_categories", "manual_context", "keywords",
+        }
+        assert set(context.keys()) >= required_keys
+
+    @pytest.mark.asyncio
+    async def test_no_duplicate_role_headings(self, generation_ready_client):
+        """Each role context should appear as a heading exactly once."""
+        client, role_id, app_id = generation_ready_client
+
+        # Add another accomplishment under same role context
+        await client.post(
+            "/api/v1/experience/accomplishments",
+            json={
+                "description": "Reduced infrastructure costs by 30%",
+                "context": "TechCo, 2024",
+            },
+        )
+
+        from app.services import application_service
+        from app.services.generation_service import build_generation_context
+
+        application = await application_service.get_application(app_id, role_id)
+        with patch(
+            "app.services.generation_service._get_candidate_header",
+            new_callable=AsyncMock,
+            return_value="",
+        ):
+            context = await build_generation_context(application, role_id)
+
+        acc_text = context["accomplishments"]
+        # TechCo heading should appear exactly once
+        assert acc_text.count("### TechCo, 2024") == 1
+        # But both accomplishments should be listed under it
+        assert "Led migration" in acc_text
+        assert "Reduced infrastructure costs" in acc_text
+
+
 class TestBuildResearchContextWithGaps:
     """Validate build_research_context() handles gaps correctly."""
 

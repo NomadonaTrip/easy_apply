@@ -193,6 +193,7 @@ Backend `.env` file (see `.env.example`):
 - `LLM_API_KEY` - Required for Gemini API
 - `LLM_PROVIDER` - Default: `gemini`
 - `LLM_MODEL` - Default: `gemini-2.0-flash-exp`
+- `LLM_MODEL_GEN` - Optional, override model for resume/cover letter generation
 - `SERPER_API_KEY` - Optional, enables web search tool
 - `DEBUG` - Default: `false`
 

@@ -66,6 +66,7 @@ __all__ = [
     "ResearchResult",
     # Factory
     "get_llm_provider",
+    "get_llm_provider_for_generation",
     "reset_provider",
 ]
 
@@ -135,6 +136,33 @@ def _create_provider(config: LLMConfig) -> LLMProvider:
 
     else:
         raise ValueError(f"Unknown LLM provider: {config.provider}")
+
+
+def get_llm_provider_for_generation() -> LLMProvider:
+    """Get an LLM provider for generation tasks (resume/cover letter).
+
+    When LLM_MODEL_GEN is set, creates a fresh (non-cached) provider
+    using the override model. When empty, returns the default singleton.
+    """
+    from app.config import settings
+
+    if not settings.llm_model_gen:
+        return get_llm_provider()
+
+    # Create a non-cached provider with the generation-specific model
+    config = LLMConfig(
+        provider=settings.llm_provider,
+        api_key=settings.llm_api_key,
+        model=settings.llm_model_gen,
+    )
+    concrete = _create_provider(config)
+
+    from .instrumented_provider import DefaultCallLogger
+
+    call_logger = DefaultCallLogger()
+    return InstrumentedProvider(
+        inner=concrete, logger=call_logger, provider_name=config.provider
+    )
 
 
 def reset_provider() -> None:

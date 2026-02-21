@@ -552,3 +552,82 @@ class TestRatePacer:
         for i in range(1, len(call_times)):
             gap = call_times[i] - call_times[i - 1]
             assert gap >= 0.04  # Allow small timing tolerance
+
+
+# ============================================================
+# LLM_MODEL_GEN Provider Factory Tests
+# ============================================================
+
+
+class TestGetLLMProviderForGeneration:
+    """Test get_llm_provider_for_generation respects LLM_MODEL_GEN."""
+
+    def test_returns_default_when_no_override(self):
+        """When LLM_MODEL_GEN is empty, returns the default singleton."""
+        from app.llm import get_llm_provider_for_generation, reset_provider
+
+        reset_provider()
+        with patch("app.config.settings") as mock_settings:
+            mock_settings.llm_model_gen = ""
+            mock_settings.llm_provider = "gemini"
+            mock_settings.llm_api_key = "test-key"
+            mock_settings.llm_model = "gemini-2.0-flash-exp"
+
+            with patch("app.llm._create_provider") as mock_create:
+                mock_inner = _make_mock_inner("gemini-2.0-flash-exp")
+                mock_create.return_value = mock_inner
+
+                p1 = get_llm_provider_for_generation()
+                p2 = get_llm_provider_for_generation()
+                # Should be the same singleton instance
+                assert p1 is p2
+
+        reset_provider()
+
+    def test_creates_fresh_provider_with_override(self):
+        """When LLM_MODEL_GEN is set, creates a non-cached provider."""
+        from app.llm import get_llm_provider_for_generation, reset_provider
+
+        reset_provider()
+        with patch("app.config.settings") as mock_settings:
+            mock_settings.llm_model_gen = "gemini-2.5-pro"
+            mock_settings.llm_provider = "gemini"
+            mock_settings.llm_api_key = "test-key"
+            mock_settings.llm_model = "gemini-2.0-flash-exp"
+
+            with patch("app.llm._create_provider") as mock_create:
+                mock_inner = _make_mock_inner("gemini-2.5-pro")
+                mock_create.return_value = mock_inner
+
+                provider = get_llm_provider_for_generation()
+
+                # Verify _create_provider was called with the override model
+                call_config = mock_create.call_args[0][0]
+                assert call_config.model == "gemini-2.5-pro"
+                assert isinstance(provider, InstrumentedProvider)
+
+        reset_provider()
+
+    def test_override_provider_not_cached_as_singleton(self):
+        """Override provider must NOT pollute the singleton."""
+        from app.llm import get_llm_provider, get_llm_provider_for_generation, reset_provider
+
+        reset_provider()
+        with patch("app.config.settings") as mock_settings:
+            mock_settings.llm_model_gen = "gemini-2.5-pro"
+            mock_settings.llm_provider = "gemini"
+            mock_settings.llm_api_key = "test-key"
+            mock_settings.llm_model = "gemini-2.0-flash-exp"
+
+            with patch("app.llm._create_provider") as mock_create:
+                mock_inner_default = _make_mock_inner("gemini-2.0-flash-exp")
+                mock_inner_gen = _make_mock_inner("gemini-2.5-pro")
+                mock_create.side_effect = [mock_inner_default, mock_inner_gen]
+
+                default = get_llm_provider()
+                gen = get_llm_provider_for_generation()
+
+                # They should be different instances
+                assert default is not gen
+
+        reset_provider()

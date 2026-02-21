@@ -5,8 +5,10 @@ Generates a tailored resume using candidate experience, company research,
 keyword priorities, and optional manual context.
 
 Prompt placeholders:
+    {candidate_header}  - First ~500 chars of resume text (name, contact, summary)
     {skills}            - Formatted skills from experience database
-    {accomplishments}   - Formatted accomplishments from experience database
+    {certifications}    - Certifications/qualifications separated from skills
+    {accomplishments}   - Role-grouped accomplishments from experience database
     {company_name}      - Target company name
     {job_posting}       - Full job description text
     {research_context}  - Output from build_research_context() in llm_helpers.py
@@ -23,13 +25,26 @@ from app.llm.prompts import PromptRegistry
 
 RESUME_GENERATION_PROMPT = """You are an expert resume writer creating a tailored resume for a job application.
 
+## CANDIDATE IDENTITY (from uploaded resume)
+
+{candidate_header}
+
+CRITICAL: Extract the candidate's ACTUAL full name and contact information from the text above. Use the REAL name - never use placeholder text like "[Candidate Name]" or "[Your Name]".
+
 ## CANDIDATE EXPERIENCE DATABASE
 
 ### Skills:
 {skills}
 
-### Accomplishments:
+### Certifications:
+{certifications}
+
+CRITICAL: ALL certifications listed above MUST appear in the final resume under Education or a dedicated Certifications section. Do not omit any.
+
+### Experience (grouped by role):
 {accomplishments}
+
+CRITICAL: Each role heading above MUST appear EXACTLY ONCE in the Experience section. Do NOT duplicate or merge roles. Place each accomplishment under its original role heading only.
 
 ## TARGET POSITION
 
@@ -51,13 +66,16 @@ RESUME_GENERATION_PROMPT = """You are an expert resume writer creating a tailore
 
 ## INSTRUCTIONS
 
-1. Create a professional resume tailored to this specific position
-2. Emphasize skills and accomplishments that match the keywords (in priority order)
-3. Use the company research to align language and values
-4. Structure with clear sections: Summary, Experience, Skills, Education
-5. Be specific and quantify achievements where possible
-6. If research gaps exist (noted above), focus on demonstrated skills and experience rather than company-specific positioning for those areas
-7. If additional context from the applicant is provided, incorporate it naturally
+1. Use the candidate's REAL name and contact info from the Candidate Identity section above
+2. Create a professional resume tailored to this specific position
+3. Preserve the role-accomplishment grouping from the Experience section above - each role appears exactly once
+4. Include ALL certifications from the Certifications section
+5. Emphasize skills and accomplishments that match the keywords (in priority order)
+6. Use the company research to align language and values
+7. Structure with clear sections: Summary, Experience, Skills, Education/Certifications
+8. Be specific and quantify achievements where possible
+9. If research gaps exist (noted above), focus on demonstrated skills and experience rather than company-specific positioning for those areas
+10. If additional context from the applicant is provided, incorporate it naturally
 
 ## OUTPUT CONSTRAINTS (CRITICAL)
 
@@ -72,11 +90,11 @@ RESUME_GENERATION_PROMPT = """You are an expert resume writer creating a tailore
 
 ## OUTPUT FORMAT
 
-Return the resume as clean markdown with the following structure:
+Return the resume as clean markdown. The name and contact info MUST be real (from Candidate Identity above):
 
-# [Candidate Name]
+# [Actual candidate name from above]
 
-[Contact info placeholder]
+[Actual contact info: email, phone, location from above]
 
 ## Professional Summary
 
@@ -92,9 +110,9 @@ Return the resume as clean markdown with the following structure:
 
 [Comma-separated list organized by category]
 
-## Education
+## Education & Certifications
 
-[Degrees and certifications]
+[Degrees and ALL certifications from the list above]
 
 Generate the resume now:
 """
@@ -105,7 +123,8 @@ RESUME_SYSTEM_PROMPT = """You are an expert resume writer. Your resumes are:
 - Free of AI-sounding language
 - Focused on quantifiable achievements
 - Professionally formatted in clean markdown
-- Written in active voice with concrete, specific language"""
+- Written in active voice with concrete, specific language
+- ALWAYS use the candidate's real name and contact info - never placeholders"""
 
 # Register prompts
 PromptRegistry.register("generation_resume", RESUME_GENERATION_PROMPT)

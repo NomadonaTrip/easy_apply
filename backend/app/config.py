@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     llm_provider: Literal["gemini", "claude"] = "gemini"
     llm_api_key: str = ""
     llm_model: str = "gemini-2.0-flash-exp"
+    llm_model_gen: str = ""  # Override model for generation (resume/cover letter)
 
     # Tool API Keys
     serper_api_key: str | None = None  # For web search tool
