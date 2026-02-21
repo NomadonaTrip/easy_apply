@@ -130,7 +130,7 @@ async def record_application_success(
             pattern = existing.get(keyword_lower)
             if pattern:
                 pattern.times_successful += 1
-                pattern.success_rate = pattern.times_successful / pattern.times_used
+                pattern.success_rate = min(1.0, pattern.times_successful / max(1, pattern.times_used))
                 pattern.updated_at = datetime.now(timezone.utc)
             else:
                 logger.warning(

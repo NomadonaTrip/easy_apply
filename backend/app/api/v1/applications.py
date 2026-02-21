@@ -16,7 +16,7 @@ from app.models.application import (
 from app.models.research import ResearchCategory
 from app.models.keyword import Keyword, KeywordList, KeywordExtractionResponse
 from app.services import application_service
-from app.services.keyword_service import extract_keywords, keywords_to_json
+from app.services.keyword_service import extract_keywords_with_patterns, keywords_to_json
 from app.services import learning_service
 
 
@@ -139,37 +139,12 @@ async def extract_application_keywords(
     if not application.job_posting:
         raise HTTPException(status_code=400, detail="No job posting to analyze")
 
-    keyword_list = await extract_keywords(application.job_posting)
+    is_first_extraction = application.keywords is None
 
-    # Fetch learned patterns and apply boosting
-    patterns_applied = False
-    pattern_count = 0
-    patterns = await learning_service.get_keyword_patterns(role.id)
-
-    if patterns:
-        pattern_count = len(patterns)
-        # Convert keywords to score-based format for boosting
-        kw_dicts = [
-            {"keyword": k.text, "score": k.priority / 10.0, "priority": k.priority, "category": k.category}
-            for k in keyword_list.keywords
-        ]
-        boosted = learning_service.apply_pattern_boost(kw_dicts, patterns)
-        # Convert back to Keyword objects with updated priorities and pattern_boosted flag
-        keyword_list = KeywordList(keywords=[
-            Keyword(
-                text=kw["keyword"],
-                priority=max(1, min(10, round(kw["score"] * 10))),
-                category=kw.get("category", "general"),
-                pattern_boosted=kw.get("pattern_boosted", False),
-            )
-            for kw in boosted
-        ])
-        # Only mark patterns as applied if at least one keyword was actually boosted
-        patterns_applied = any(k.pattern_boosted for k in keyword_list.keywords)
-
-    # Record keyword usage for future pattern learning
-    await learning_service.record_keyword_usage(
-        role.id, [k.text for k in keyword_list.keywords]
+    keyword_list, patterns_applied, pattern_count = await extract_keywords_with_patterns(
+        job_posting=application.job_posting,
+        role_id=role.id,
+        is_first_extraction=is_first_extraction,
     )
 
     update_data = ApplicationUpdate(

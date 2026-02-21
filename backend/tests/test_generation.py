@@ -86,7 +86,7 @@ async def reviewed_application(client_with_role):
         ]
     )
     with patch(
-        "app.api.v1.applications.extract_keywords",
+        "app.services.keyword_service.extract_keywords",
         new_callable=AsyncMock,
         return_value=mock_keywords,
     ):

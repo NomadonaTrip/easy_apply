@@ -31,7 +31,10 @@ class Role(SQLModel, table=True):
     skills: list["Skill"] = Relationship(back_populates="role")
     accomplishments: list["Accomplishment"] = Relationship(back_populates="role")
     resumes: list["Resume"] = Relationship(back_populates="role")
-    keyword_patterns: list["KeywordPattern"] = Relationship(back_populates="role")
+    keyword_patterns: list["KeywordPattern"] = Relationship(
+        back_populates="role",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    )
 
     def __init__(self, **data: Any) -> None:
         """Initialize Role with validation.

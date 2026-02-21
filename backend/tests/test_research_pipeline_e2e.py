@@ -129,7 +129,7 @@ class TestResearchPipelineHappyPath:
 
         # ── Step 2: Extract keywords (mock LLM) ────────────────────────
         with patch(
-            "app.api.v1.applications.extract_keywords",
+            "app.services.keyword_service.extract_keywords",
             new_callable=AsyncMock,
             return_value=MOCK_KEYWORDS,
         ):
@@ -281,7 +281,7 @@ class TestResearchPipelineDegradation:
 
         # ── Step 2: Extract keywords ────────────────────────────────────
         with patch(
-            "app.api.v1.applications.extract_keywords",
+            "app.services.keyword_service.extract_keywords",
             new_callable=AsyncMock,
             return_value=MOCK_KEYWORDS,
         ):

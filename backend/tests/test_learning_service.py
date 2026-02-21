@@ -460,6 +460,57 @@ class TestKeywordExtractionWithPatterns:
         assert data["keywords"][0]["text"] == "Python"
         assert data["keywords"][0]["priority"] == 9
 
+    @pytest.mark.asyncio
+    @patch('app.services.keyword_service.get_llm_provider')
+    async def test_re_extraction_does_not_double_count_usage(self, mock_get_provider, client_with_role):
+        """Re-extracting keywords should NOT increment times_used again."""
+        client, role_id = client_with_role
+
+        mock_llm_response = json.dumps({
+            "keywords": [
+                {"text": "Python", "priority": 9, "category": "technical_skill"},
+            ]
+        })
+        mock_provider = AsyncMock()
+        mock_provider.generate.return_value = MagicMock(content=mock_llm_response)
+        mock_get_provider.return_value = mock_provider
+
+        # Create application
+        app_response = await client.post("/api/v1/applications", json={
+            "company_name": "Test Corp",
+            "job_posting": "We need a Senior Python Developer.",
+        })
+        app_id = app_response.json()["id"]
+
+        # First extraction - should record usage
+        await client.post(f"/api/v1/applications/{app_id}/keywords/extract")
+
+        # Verify usage recorded once
+        from sqlmodel import select
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(KeywordPattern).where(
+                    KeywordPattern.role_id == role_id,
+                    KeywordPattern.keyword == "python"
+                )
+            )
+            pattern = result.scalar_one()
+            assert pattern.times_used == 1
+
+        # Re-extract (application already has keywords now)
+        await client.post(f"/api/v1/applications/{app_id}/keywords/extract")
+
+        # Verify usage was NOT incremented
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(KeywordPattern).where(
+                    KeywordPattern.role_id == role_id,
+                    KeywordPattern.keyword == "python"
+                )
+            )
+            pattern = result.scalar_one()
+            assert pattern.times_used == 1  # Still 1, not 2
+
 
 # --- Integration Tests: Status Change Triggers Learning (Task 4) ---
 

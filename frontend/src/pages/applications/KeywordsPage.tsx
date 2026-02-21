@@ -70,6 +70,10 @@ export function KeywordsPage() {
     );
   }
 
+  const boostedCount = localKeywords.filter((k) => k.pattern_boosted).length;
+  const hasBoostedKeywords = boostedCount > 0;
+  const patternConfidence = boostedCount >= 5 ? 'High' : boostedCount >= 3 ? 'Moderate' : 'Low';
+
   return (
     <WizardStepLayout currentStep={2}>
       <div className="flex items-center justify-between mb-6">
@@ -100,13 +104,14 @@ export function KeywordsPage() {
         </div>
       )}
 
-      {localKeywords.some((k) => k.pattern_boosted) && (
+      {hasBoostedKeywords && (
         <Alert className="mb-4">
           <Sparkles className="h-4 w-4" />
           <AlertTitle>Learning from your success</AlertTitle>
           <AlertDescription>
-            Keywords ranked based on patterns from your previous successful applications.
-            Keywords marked with "Success pattern" were boosted.
+            {boostedCount} keyword{boostedCount !== 1 ? 's' : ''} boosted based on patterns
+            from your previous successful applications ({patternConfidence} confidence).
+            Your manual adjustments always take priority.
           </AlertDescription>
         </Alert>
       )}
